@@ -1,0 +1,11 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "tongxi",
+  "outputfilename": "Tongxi",
+  "frontend:install": "npm ci --prefer-offline --no-audit --no-fund",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": { "name": "Tongxi" },
+  "info": { "productName": "Tongxi", "productVersion": "0.1.2", "comments": "同席 — 让你的 AI 伙伴一起交流、一起做事。" }
+}

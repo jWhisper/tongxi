@@ -1,0 +1,559 @@
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.workspace[hidden] {
+  display: none;
+}
+.role-page {
+  padding: 38px;
+  overflow: auto;
+}
+.workspace-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+.workspace-heading h1 {
+  margin: 12px 0;
+  font-size: 28px;
+}
+.workspace-heading p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0;
+}
+.workspace-heading > button {
+  flex-shrink: 0;
+}
+.connection-note {
+  padding: 12px 16px;
+  border-left: 2px solid #99bdb5;
+  font-size: 12px;
+  color: var(--muted);
+}
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+  gap: 20px;
+}
+.role-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-top: 3px solid #99bdb5;
+  border-radius: 9px;
+  padding: 22px;
+}
+.role-card.inactive {
+  border-top-color: #c8d1d9;
+  background: #f1f4f6;
+}
+.role-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.role-avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: #e5f0ed;
+  color: var(--accent);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.role-card h2 {
+  font-size: 16px;
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+.identity {
+  font:
+    10px Menlo,
+    monospace;
+  color: var(--muted);
+}
+.role-status {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--muted);
+}
+.role-description {
+  color: #506578;
+  font-size: 13px;
+  min-height: 42px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.role-model {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.role-actions {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 18px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.small-primary {
+  padding: 8px 11px;
+  background: #e5f0ed;
+  color: var(--accent);
+  font-size: 11px;
+  border-radius: 5px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.workspace-empty {
+  padding: 65px 30px;
+  text-align: center;
+  color: var(--muted);
+}
+.workspace-empty h2 {
+  font-family: "Songti SC", "STSong", serif;
+  color: var(--ink);
+  font-size: 23px;
+  font-weight: 500;
+}
+.workspace-empty p {
+  font-size: 13px;
+  line-height: 1.9;
+  max-width: 410px;
+  margin: 16px auto 22px;
+}
+.empty-seat {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border: 1px dashed #99bdb5;
+  border-radius: 18px;
+  margin: 0 auto 28px;
+  color: var(--accent);
+  font-size: 30px;
+}
+.conversation-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.conversation-list {
+  width: 235px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--line);
+  padding: 20px 14px;
+  overflow: auto;
+}
+.list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 17px;
+}
+.list-heading h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.list-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.9;
+}
+.conversation-item {
+  width: 100%;
+  text-align: left;
+  padding: 15px 12px;
+  border-radius: 7px;
+  color: var(--ink);
+  background: transparent;
+  margin-bottom: 5px;
+}
+.conversation-item.selected {
+  background: #e5f0ed;
+}
+.conversation-item:hover {
+  background: #eaf0f5;
+}
+.conversation-item strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.conversation-item span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.conversation-placeholder {
+  align-self: center;
+  flex: 1;
+}
+.saved-conversation {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.conversation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 24px 28px 12px;
+}
+.conversation-heading h2 {
+  font-size: 19px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.conversation-heading p {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.conversation-heading > button {
+  white-space: nowrap;
+}
+.member-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 28px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.member-strip > span {
+  font-size: 11px;
+  padding: 5px 8px;
+  background: #eaf0f5;
+  border-radius: 4px;
+}
+.member-strip small {
+  font-size: 9px;
+  color: var(--muted);
+}
+.saved-messages {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 28px;
+}
+.conversation-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 40px 0;
+}
+.conversation-empty h3 {
+  color: var(--ink);
+  font-weight: 500;
+}
+.conversation-empty p {
+  font-size: 12px;
+}
+.saved-message {
+  margin-bottom: 20px;
+  padding: 17px 20px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.saved-message.user {
+  background: #eaf0f5;
+  border-color: transparent;
+}
+.saved-message strong {
+  font-size: 12px;
+}
+.saved-message time {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 14px;
+}
+.saved-message p {
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 12px 0 0;
+}
+.message-compose {
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+}
+.message-compose > label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.message-compose textarea {
+  width: 100%;
+  min-height: 85px;
+  max-height: 220px;
+  resize: vertical;
+  border: 1px solid #cddbe4;
+  border-radius: 7px;
+  padding: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+}
+.message-compose > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+.message-compose p {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+  margin: 0;
+}
+.message-compose button {
+  white-space: nowrap;
+}
+.workspace-dialog {
+  width: min(590px, calc(100vw - 40px));
+  max-height: calc(100dvh - 60px);
+  border: 1px solid var(--line);
+  padding: 0;
+  border-radius: 12px;
+  color: var(--ink);
+  background: #f7f9fb;
+  box-shadow: 0 24px 80px #19324930;
+}
+.workspace-dialog::backdrop {
+  background: #19324960;
+}
+.workspace-dialog header {
+  padding: 26px 30px 10px;
+}
+.workspace-dialog h2 {
+  font:
+    26px "Songti SC",
+    "STSong",
+    serif;
+  margin: 10px 0;
+}
+.editor-fields {
+  border: 0;
+  margin: 0;
+  padding: 0 30px 24px;
+  min-width: 0;
+}
+.editor-fields label {
+  display: block;
+  font-size: 12px;
+  margin-top: 18px;
+}
+.editor-fields input:not([type="checkbox"]),
+.editor-fields textarea,
+.editor-fields select {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid #cddbe4;
+  border-radius: 5px;
+  font: inherit;
+  line-height: 1.5;
+}
+.editor-fields textarea {
+  resize: vertical;
+}
+.editor-fields input::placeholder,
+.editor-fields textarea::placeholder {
+  color: #8a9cab;
+}
+.editor-fields select:focus-visible {
+  outline: 3px solid #70b6ac;
+  outline-offset: 3px;
+}
+.editor-divider {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  margin: 24px 0 0;
+  padding-top: 20px;
+}
+.editor-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.editor-fields .choice-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #eaf0f5;
+  border-radius: 6px;
+  margin-top: 10px;
+}
+.choice-row input {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.choice-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.choice-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.8;
+  margin-top: 3px;
+}
+.member-choices {
+  max-height: 240px;
+  overflow: auto;
+}
+.workspace-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 30px;
+  border-top: 1px solid var(--line);
+  background: #f7f9fb;
+  position: sticky;
+  bottom: 0;
+}
+@media (max-width: 1050px) {
+  .role-page {
+    padding: 28px;
+  }
+  .workspace-heading {
+    align-items: flex-start;
+  }
+  .workspace-heading h1 {
+    font-size: 24px;
+  }
+  .conversation-list {
+    width: 190px;
+  }
+  .conversation-heading,
+  .saved-messages {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .member-strip {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .message-compose {
+    padding: 14px;
+  }
+}
+@media (max-width: 750px) {
+  .workspace-heading {
+    flex-direction: column;
+  }
+  .conversation-workspace {
+    flex-direction: column;
+  }
+  .conversation-list {
+    width: 100%;
+    max-height: 180px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .conversation-item {
+    width: auto;
+    min-width: 150px;
+    margin-right: 6px;
+  }
+  .editor-fields {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+.conversation-run {
+  padding: 12px 16px;
+  margin: -8px 0 8px 16px;
+  border-left: 2px solid var(--accent, #38786e);
+  background: #f4f8f6;
+  border-radius: 0 10px 10px 0;
+  font-size: 13px;
+}
+.run-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.run-heading span,
+.conversation-run small {
+  color: #65756f;
+}
+.run-heading button {
+  margin-left: auto;
+}
+.conversation-run p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  margin: 10px 0 0;
+}
+.conversation-run.completed {
+  padding: 6px 16px;
+  background: transparent;
+  border-left-color: #c4d8d0;
+}
+.conversation-run .run-error {
+  color: #965540;
+}
+
+.message-recipient {
+  color: var(--accent);
+}
+.message-reference {
+  color: var(--muted);
+  font-size: 11px;
+}
+.chain-progress {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #d1dfdf;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.chain-progress span,
+.chain-progress small {
+  color: var(--muted);
+}
+.chain-progress small {
+  flex-basis: 100%;
+}
+.chain-progress > button {
+  margin-left: auto;
+}
+.conversation-run .retry-run {
+  display: block;
+  margin-top: 8px;
+}
+.conversation-run small + small {
+  margin-left: 12px;
+}
