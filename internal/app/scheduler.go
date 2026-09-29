@@ -85,27 +85,43 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 	a, err := s.db.Agent(r.AgentID)
 	ctx, cancel := context.WithTimeout(queueCtx, s.chatTimeout)
 	var cm model.ToolCallingChatModel
+	var modelConfig store.ModelConfig
 	var secret string
 	var input []*schema.Message
 	config := agent.Config{Name: "agent_" + a.ID, Description: a.Description, Instruction: a.Instruction, Tools: a.Tools}
 	var history []*schema.Message
+	var skillReminder string
 	if err == nil && !a.Enabled {
 		err = errors.New("角色已停用，本次任务未执行")
 	}
 	if err == nil {
 		secret, err = s.vault.Get(a.KeyRef)
 		if err != nil || secret == "" {
-			err = errors.New("无法读取角色的 API Key，请重新保存角色连接")
+			err = errors.New("无法读取 API Key，请在模型设置中重新保存该模型的密钥")
 		}
 	}
 	if err == nil {
 		cm, err = s.newChatModel(ctx, a.BaseURL, a.Model, secret)
 	}
-	if err == nil && r.Kind != "selector" {
-		history, err = s.db.ModelHistory(r.AgentID, r.ConversationID)
+	if err == nil {
+		history, err = s.db.ContextHistory(r.AgentID, r.ConversationID, r.Kind)
+		history = freshSkillHistory(history)
 	}
 	if err == nil {
 		config, err = s.collaborationConfig(r, config)
+	}
+	if err == nil && r.Kind != "selector" {
+		config, err = s.sourceConfig(r, config)
+	}
+	if err == nil && r.Kind != "selector" {
+		config, skillReminder, err = s.skillConfig(r, config)
+	}
+	if err == nil {
+		modelConfig, err = s.db.Model(a.ModelID)
+		config.Context = &agent.ContextConfig{Capacity: modelConfig.ContextTokens, Ratio: modelConfig.TokenRatio, Backend: contextBackend{s.db, r.ConversationID, r.AgentID}}
+	}
+	if err == nil {
+		config, err = s.historyConfig(r, config)
 	}
 	if err == nil {
 		r.Status, r.AgentName, r.StartedAt = "running", a.Name, time.Now().UTC().Format(time.RFC3339Nano)
@@ -120,6 +136,9 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 	transcript := []*schema.Message{}
 	if err == nil {
 		var output []*schema.Message
+		if skillReminder != "" {
+			history = append(history, schema.SystemMessage(skillReminder))
+		}
 		output, err = agent.RunConversation(ctx, cm, config, append(history, input...), func(u agent.Update) {
 			s.mu.Lock()
 			if s.chatActive.Status != "running" {
@@ -127,6 +146,9 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 				return
 			}
 			s.chatActive.Text += u.Text
+			if u.Compacting != nil {
+				s.chatActive.ContextCompacting = *u.Compacting
+			}
 			if u.Tool != "" {
 				s.chatActive.Tools = append(s.chatActive.Tools, u.Tool)
 				if u.Tool == "skip_reply" {
@@ -143,6 +165,22 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 	}
 	s.mu.Lock()
 	r = cloneChat(*s.chatActive)
+	r.ContextCompacting = false
+	if err == nil && r.Status == "running" {
+		chain, chainErr := s.db.RunChain(r.ID)
+		if chainErr != nil && !errors.Is(chainErr, sql.ErrNoRows) {
+			err = chainErr
+		} else if chain.LeadPolicy == 1 && r.AgentID == chain.LeadAgentID {
+			step, stepErr := s.db.LeadStep(r.ID)
+			if stepErr != nil {
+				err = stepErr
+			} else if step == nil {
+				err = errors.New("主要助手未提交有效验收和下一步安排，可重试本次任务")
+			} else {
+				r.Text = step.PublicText()
+			}
+		}
+	}
 	if err == nil && r.Kind == "selector" && !slices.Contains(r.Tools, "choose_speaker") && !slices.Contains(r.Tools, "pause_discussion") {
 		err = errors.New("未返回有效的发言选择")
 	}
@@ -160,7 +198,11 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 		r.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		r.Revision++
 	}
-	saveErr := s.db.FinishConversationRun(r, transcript, newID())
+	var contextState *store.ContextState
+	if err == nil && config.Context != nil && config.Context.Result != nil {
+		contextState = &store.ContextState{Messages: config.Context.Result, ModelID: modelConfig.ID, ModelVersion: modelConfig.Version, TokenRatio: config.Context.Ratio}
+	}
+	saveErr := s.db.FinishConversationRun(r, transcript, newID(), contextState)
 	if saveErr != nil {
 		r.Status, r.Error = "failed", "结果未能保存到本地数据库，请检查磁盘空间后重启应用"
 		r.Revision++
@@ -225,6 +267,9 @@ func (s *Service) StopRun(id string) error {
 }
 
 func cloneChat(r store.ConversationRun) store.ConversationRun {
+	if r.Status != "running" {
+		r.ContextCompacting = false
+	}
 	r.Tools = append([]string{}, r.Tools...)
 	return r
 }

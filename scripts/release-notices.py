@@ -10,7 +10,7 @@ parts = [("Tongxi third-party notices", (root / "THIRD_PARTY_NOTICES.md").read_t
 def collect(name, directory):
     if not directory:
         return
-    for pattern in ("LICENSE*", "LICENCE*", "NOTICE*", "COPYING*"):
+    for pattern in ("LICENSE*", "LICENCE*", "NOTICE*", "COPYING*", "license*", "licence*", "notice*", "copying*"):
         for path in sorted(pathlib.Path(directory).glob(pattern)):
             if path.is_file():
                 parts.append((f"{name} / {path.name}", path.read_text(errors="replace")))

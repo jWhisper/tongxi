@@ -1,0 +1,13 @@
+.artifact-files { margin: 16px 0; min-width: 0; }
+.artifact-caption { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.artifact-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; margin-top: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+.artifact-format { flex: 0 0 auto; padding: 7px 5px; min-width: 42px; text-align: center; border: 1px solid var(--line); border-bottom: 3px solid var(--accent); color: var(--accent); font: 11px ui-monospace, monospace; }
+.artifact-body { min-width: 0; flex: 1; }
+.artifact-body > strong { display: block; overflow-wrap: anywhere; }
+.artifact-meta { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+.artifact-evidence { margin: 8px 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.artifact-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 9px; }
+.artifact-actions button { font-size: 12px; }
+.artifact-error { color: #9b3838; font-size: 12px; overflow-wrap: anywhere; }
+.artifact-history { border-top: 1px solid var(--line); padding: 10px 24px; max-height: 300px; overflow: auto; }
+.artifact-history > summary { color: var(--accent); cursor: pointer; font-size: 12px; }

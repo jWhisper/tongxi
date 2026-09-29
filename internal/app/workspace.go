@@ -2,33 +2,43 @@ package app
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"tongxi/internal/store"
 )
 
 type AgentInput struct {
+	SkillIDs    []string `json:"skillIDs"`
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Instruction string   `json:"instruction"`
-	BaseURL     string   `json:"baseURL"`
-	Model       string   `json:"model"`
-	APIKey      string   `json:"apiKey"`
+	ModelID     string   `json:"modelID"`
 	Tools       []string `json:"tools"`
 	Version     int      `json:"version"`
 }
 
 type Workspace struct {
+	Skills        []store.Skill        `json:"skills"`
+	Models        []store.ModelConfig  `json:"models"`
 	Agents        []store.Agent        `json:"agents"`
 	Conversations []store.Conversation `json:"conversations"`
 }
 
 type ConversationDetail struct {
-	Chains       []store.Chain           `json:"chains"`
-	Conversation store.Conversation      `json:"conversation"`
-	Messages     []store.Message         `json:"messages"`
-	Runs         []store.ConversationRun `json:"runs"`
+	Artifacts    []store.Artifact          `json:"artifacts"`
+	ScriptRuns   []store.ScriptRun         `json:"scriptRuns"`
+	SkillUses    []store.SkillUse          `json:"skillUses"`
+	Sources      []store.Source            `json:"sources"`
+	Tasks        []store.WorkTask          `json:"tasks"`
+	Versions     []store.WorkVersion       `json:"versions"`
+	LeadSteps    map[string]store.LeadStep `json:"leadSteps"`
+	Chains       []store.Chain             `json:"chains"`
+	Conversation store.Conversation        `json:"conversation"`
+	Messages     []store.Message           `json:"messages"`
+	Runs         []store.ConversationRun   `json:"runs"`
 }
 
 func workspaceError(err error) error {
@@ -49,8 +59,16 @@ func (s *Service) Workspace() (Workspace, error) {
 	if err != nil {
 		return Workspace{}, workspaceError(err)
 	}
+	models, err := s.db.Models()
+	if err != nil {
+		return Workspace{}, workspaceError(err)
+	}
+	skills, err := s.db.Skills()
+	if err != nil {
+		return Workspace{}, workspaceError(err)
+	}
 	conversations, err := s.db.Conversations()
-	return Workspace{Agents: agents, Conversations: conversations}, workspaceError(err)
+	return Workspace{Agents: agents, Conversations: conversations, Models: models, Skills: skills}, workspaceError(err)
 }
 
 func (s *Service) SaveAgent(in AgentInput) (store.Agent, error) {
@@ -80,12 +98,17 @@ func (s *Service) SaveAgent(in AgentInput) (store.Agent, error) {
 			tools = append(tools, tool)
 		}
 	}
-	config, err := normalizeSettings(SettingsInput{BaseURL: in.BaseURL, Model: in.Model, APIKey: in.APIKey})
+	if in.ModelID == "" {
+		return store.Agent{}, errors.New("请先在模型设置中添加模型，再为角色选择")
+	}
+	m, err := s.db.Model(in.ModelID)
 	if err != nil {
-		return store.Agent{}, err
+		return store.Agent{}, workspaceError(err)
+	}
+	if !m.HasKey {
+		return store.Agent{}, errors.New("请先在模型设置中保存 API Key")
 	}
 	a := store.Agent{ID: in.ID, Enabled: true, Version: in.Version}
-	var old store.Settings
 	if in.ID != "" {
 		a, err = s.db.Agent(in.ID)
 		if err != nil {
@@ -94,40 +117,15 @@ func (s *Service) SaveAgent(in AgentInput) (store.Agent, error) {
 		if in.Version != a.Version {
 			return a, errors.New("角色已被修改，请重新打开后编辑")
 		}
-		old = store.Settings{BaseURL: a.BaseURL, Model: a.Model, KeyRef: a.KeyRef}
 	} else {
 		a.ID = newID()
-		a.Version = 0
-		old, err = s.db.Settings()
-		if err != nil {
-			return a, workspaceError(err)
-		}
 	}
-	if config.APIKey == "" && (old.KeyRef == "" || old.BaseURL != config.BaseURL) {
-		return store.Agent{}, errors.New("请填写 API Key；只有相同服务地址才能沿用已有密钥")
-	}
-	a.Name = in.Name
-	a.Description = in.Description
-	a.Instruction = in.Instruction
-	a.BaseURL = config.BaseURL
-	a.Model = config.Model
-	a.Tools = tools
-	a.KeyRef = old.KeyRef
-	if config.APIKey != "" {
-		a.KeyRef = "model-" + newID()
-		if err = s.vault.Set(a.KeyRef, config.APIKey); err != nil {
-			return store.Agent{}, errors.New("无法保存到系统凭据存储，请检查钥匙串访问权限")
-		}
-	}
+	a.Name, a.Description, a.Instruction = in.Name, in.Description, in.Instruction
+	a.ModelID, a.Tools = m.ID, tools
+	a.SkillIDs = in.SkillIDs
 	saved, err := s.db.SaveAgent(a)
 	if err != nil {
-		if a.KeyRef != old.KeyRef {
-			_ = s.vault.Delete(a.KeyRef)
-		}
 		return store.Agent{}, workspaceError(err)
-	}
-	if old.KeyRef != "" && old.KeyRef != a.KeyRef {
-		s.deleteUnusedKey(old.KeyRef)
 	}
 	return saved, nil
 }
@@ -168,7 +166,41 @@ func (s *Service) SaveConversation(c store.Conversation) (store.Conversation, er
 	if create {
 		c.ID = newID()
 	}
+	createdDirectory := ""
+	if !create {
+		old, err := s.db.Conversation(c.ID)
+		if err != nil {
+			return c, workspaceError(err)
+		}
+		if old.WorkDir != "" && old.WorkDir != c.WorkDir {
+			return c, errors.New("工作目录已固定，不能更换或清空；请新建会话使用其他目录")
+		}
+		if old.WorkDir != "" { // Renaming a conversation does not require its disk to be mounted.
+			v, err := s.db.SaveConversation(c, false)
+			return v, workspaceError(err)
+		}
+	}
+	if create && c.WorkDir == "" {
+		c.WorkDir, _ = filepath.Abs(filepath.Join(s.db.Directory(), "workspaces", c.ID))
+		if err := os.MkdirAll(c.WorkDir, 0700); err != nil {
+			return c, errors.New("无法创建会话工作目录，请检查磁盘权限")
+		}
+		createdDirectory = c.WorkDir
+	}
+	if c.WorkDir != "" {
+		path, err := ValidateWorkspaceDirectory(c.WorkDir)
+		if err != nil {
+			if createdDirectory != "" {
+				_ = os.Remove(createdDirectory)
+			}
+			return c, err
+		}
+		c.WorkDir = path
+	}
 	saved, err := s.db.SaveConversation(c, create)
+	if err != nil && createdDirectory != "" {
+		_ = os.Remove(createdDirectory)
+	}
 	return saved, workspaceError(err)
 }
 
@@ -188,6 +220,37 @@ func (s *Service) Conversation(id string) (ConversationDetail, error) {
 		return ConversationDetail{}, workspaceError(err)
 	}
 	runs, err := s.db.ConversationRuns(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	steps, err := s.db.PublishedLeadSteps(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	tasks, err := s.db.WorkTasks(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	versions, err := s.db.WorkVersions(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	sources, err := s.db.Sources(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	scriptRuns, err := s.db.ScriptRuns(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	artifacts, err := s.db.Artifacts(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
+	skillUses, err := s.db.SkillUses(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
 	if s.chatActive != nil {
 		for i := range runs {
 			if runs[i].ID == s.chatActive.ID {
@@ -195,7 +258,7 @@ func (s *Service) Conversation(id string) (ConversationDetail, error) {
 			}
 		}
 	}
-	return ConversationDetail{Conversation: c, Messages: messages, Runs: runs, Chains: chains}, workspaceError(err)
+	return ConversationDetail{Conversation: c, Messages: messages, Runs: runs, Chains: chains, LeadSteps: steps, Tasks: tasks, Versions: versions, Sources: sources, SkillUses: skillUses, ScriptRuns: scriptRuns, Artifacts: artifacts}, nil
 }
 
 // The desktop can only publish as the local user; agent identity belongs to the backend.

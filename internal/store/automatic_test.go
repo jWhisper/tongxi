@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-func TestAutomaticConclusionWaitsForAllMembersAndSurvivesRestart(t *testing.T) {
+func TestLegacyAutomaticConclusionWaitsForAllMembersAndSurvivesRestart(t *testing.T) {
 	s, c, dir := groupFixture(t)
 	// Existing discussion rooms use their first enabled member automatically.
 	c.Mode, c.LeadAgentID = "discussion", ""
 	if _, err := s.SaveConversation(c, false); err != nil {
 		t.Fatal(err)
 	}
-	d := scheduleTest(t, s, "automatic", "lead")
+	d := scheduleLegacyLeadTest(t, s, "automatic")
 	lead, _ := claimTest(t, s, d.Runs[0])
 	for _, id := range []string{"b", "c"} {
 		if _, err := s.Deliver(lead.ID, id, SendInput{TargetAgentID: id, Content: "请提供意见"}, id+"-request", id+"-run"); err != nil {
@@ -64,11 +64,11 @@ func TestAutomaticConclusionWaitsForAllMembersAndSurvivesRestart(t *testing.T) {
 	}
 }
 
-func TestAutomaticConclusionStopDisableAndRetry(t *testing.T) {
+func TestLegacyAutomaticConclusionStopDisableAndRetry(t *testing.T) {
 	for _, mode := range []string{"stop", "disable-lead", "retry-member", "retry-summary"} {
 		t.Run(mode, func(t *testing.T) {
 			s, _, _ := groupFixture(t)
-			d := scheduleTest(t, s, "automatic", "lead")
+			d := scheduleLegacyLeadTest(t, s, "automatic")
 			lead, _ := claimTest(t, s, d.Runs[0])
 			child, err := s.Deliver(lead.ID, "invite", SendInput{TargetAgentID: "b", Content: "review"}, "invite-m", "invite-r")
 			if err != nil {
@@ -118,4 +118,14 @@ func TestAutomaticConclusionStopDisableAndRetry(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Old queued chains retain their pre-0.1.3 routing and six-run budget.
+func scheduleLegacyLeadTest(t *testing.T, s *Store, key string) Delivery {
+	t.Helper()
+	d := scheduleTest(t, s, key, "lead")
+	if _, err := s.db.Exec(`UPDATE chains SET lead_policy=0 WHERE id=?`, d.ChainID); err != nil {
+		t.Fatal(err)
+	}
+	return d
 }

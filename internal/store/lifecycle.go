@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 )
 
 func readRuns(tx *sql.Tx, query string, args ...any) ([]ConversationRun, error) {
@@ -21,10 +22,6 @@ func readRuns(tx *sql.Tx, query string, args ...any) ([]ConversationRun, error) 
 	}
 	return list, rows.Err()
 }
-func restoreCursor(tx *sql.Tx, runID string) error {
-	_, err := tx.Exec(`UPDATE member_cursors SET sequence=MIN(sequence,(SELECT read_from FROM runs WHERE id=?)) WHERE EXISTS(SELECT 1 FROM runs r WHERE r.id=? AND r.conversation_id=member_cursors.conversation_id AND r.agent_id=member_cursors.agent_id AND r.read_upper>0)`, runID, runID)
-	return err
-}
 func cancelRun(tx *sql.Tx, r ConversationRun, active *ConversationRun, reason string) (ConversationRun, error) {
 	if active != nil && active.ID == r.ID && active.Revision > r.Revision {
 		r = *active
@@ -36,9 +33,6 @@ func cancelRun(tx *sql.Tx, r ConversationRun, active *ConversationRun, reason st
 		return r, err
 	}
 	_, err = tx.Exec(`UPDATE runs SET status='cancelled',error=?,text=?,tools=?,finished_at=?,revision=?,transcript='null' WHERE id=? AND status IN ('queued','running')`, r.Error, r.Text, string(data), r.FinishedAt, r.Revision, r.ID)
-	if err == nil {
-		err = restoreCursor(tx, r.ID)
-	}
 	return r, err
 }
 func stopChain(tx *sql.Tx, id string, active *ConversationRun, reason string) ([]ConversationRun, error) {
@@ -126,7 +120,7 @@ func (s *Store) SetAgentEnabledAndCancel(id string, enabled bool, active *Conver
 			}
 		}
 	}
-	a, err := scanAgent(tx.QueryRow(`SELECT * FROM agents WHERE id=?`, id))
+	a, err := scanAgent(tx.QueryRow(agentSelect+` WHERE a.id=?`, id))
 	if err != nil {
 		return a, nil, err
 	}
@@ -178,11 +172,14 @@ func (s *Store) RetryRun(id, requestID, newID string) (ConversationRun, error) {
 	if err != nil {
 		return r, err
 	}
-	if c.Action != "lead" && c.Action != "direct" {
+	if c.Action != "lead" && c.Action != "direct" && c.Action != "mention" {
 		return r, ValidationError("讨论任务请重新安排一轮，不续跑旧任务")
 	}
 	if c.Status == "stopped" {
 		return r, ValidationError("已停止的协作不能重试，请重新发起")
+	}
+	if err = checkTaskCurrent(tx, c); err != nil {
+		return r, err
 	}
 	var pending, unchanged bool
 	if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM runs WHERE chain_id=? AND status IN ('queued','running'))`, c.ID).Scan(&pending); err != nil {
@@ -205,7 +202,7 @@ func (s *Store) RetryRun(id, requestID, newID string) (ConversationRun, error) {
 	if err != nil {
 		return r, err
 	}
-	limit := ChainLimit
+	limit := c.Limit
 	if c.Action == "lead" && original.AgentID != c.LeadAgentID {
 		limit-- // A successful member retry still needs a lead conclusion.
 	}
@@ -215,7 +212,7 @@ func (s *Store) RetryRun(id, requestID, newID string) (ConversationRun, error) {
 	}
 	n, _ := result.RowsAffected()
 	if n != 1 {
-		return r, ValidationError("本次协作已结束或已用完 6 次额度，请重新发起")
+		return r, ValidationError(fmt.Sprintf("本次协作已结束或已用完 %d 次额度，请重新发起", c.Limit))
 	}
 	r = ConversationRun{ID: newID, ConversationID: original.ConversationID, AgentID: original.AgentID, MessageID: original.MessageID, ChainID: c.ID, ParentRunID: original.ParentRunID, RetryOf: original.ID, AgentName: name, Status: "queued", CreatedAt: timestamp(), Revision: 1, Tools: []string{}}
 	if _, err = tx.Exec(`INSERT INTO runs(id,conversation_id,agent_id,message_id,status,error,created_at,agent_name,chain_id,parent_run_id,retry_of) VALUES(?,?,?,?,'queued','',?,?,?,NULLIF(?,''),?)`, r.ID, r.ConversationID, r.AgentID, r.MessageID, r.CreatedAt, r.AgentName, r.ChainID, r.ParentRunID, r.RetryOf); err != nil {
@@ -241,9 +238,6 @@ func (s *Store) recoverChains() error {
 	}
 	for _, r := range running {
 		if _, err = tx.Exec(`UPDATE runs SET status='interrupted',error='上次执行被中断，可手动重试或重新安排',finished_at=?,revision=revision+1 WHERE id=?`, timestamp(), r.ID); err != nil {
-			return err
-		}
-		if err = restoreCursor(tx, r.ID); err != nil {
 			return err
 		}
 		r.Status = "interrupted"

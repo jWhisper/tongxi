@@ -100,7 +100,7 @@ func TestQueueTransactionsIdempotencyAndRecovery(t *testing.T) {
 	}
 }
 
-func TestHistoryWindowKeepsToolPairsAndIsolation(t *testing.T) {
+func TestHistoryKeepsAllToolPairsAndIsolation(t *testing.T) {
 	s, a, _ := queueFixture(t)
 	for i := 0; i < 14; i++ {
 		id := fmt.Sprint(i)
@@ -120,8 +120,8 @@ func TestHistoryWindowKeepsToolPairsAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(history) != 48 || history[0].Content != "2" {
-		t.Fatal("wrong history window", len(history))
+	if len(history) != 56 || history[0].Content != "0" {
+		t.Fatal("history omitted completed turns", len(history))
 	}
 	for i := 0; i < len(history); i += 4 {
 		if history[i+1].ReasoningContent == "" || history[i+1].ToolCalls[0].ID != history[i+2].ToolCallID {
@@ -140,8 +140,8 @@ func TestHistoryWindowKeepsToolPairsAndIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	history, err = s.ModelHistory(a.ID, "one")
-	if err != nil || len(history) != 0 {
-		t.Fatal("oversized turn not excluded whole")
+	if err != nil || len(history) != 58 {
+		t.Fatal("oversized turn was omitted before budget management")
 	}
 	var data string
 	s.db.QueryRow(`SELECT transcript FROM runs WHERE id=?`, r.ID).Scan(&data)

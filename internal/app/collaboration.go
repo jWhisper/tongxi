@@ -58,6 +58,9 @@ func (s *Service) collaborationConfig(r store.ConversationRun, config agent.Conf
 		return config, err
 	}
 	roster, _ := json.Marshal(members)
+	if chain.LeadPolicy == 1 {
+		return s.leadConfig(r, chain, config, string(roster))
+	}
 	if chain.Action == "discussion" {
 		config, err = s.discussionConfig(r, config, string(roster))
 		if err != nil || r.Kind == "selector" {

@@ -30,7 +30,12 @@ type ProbeRun struct {
 	Revision   int      `json:"revision"`
 }
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db  *sql.DB
+	dir string
+}
+
+func (s *Store) Directory() string { return s.dir }
 
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -41,8 +46,12 @@ func Open(dir string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, dir: dir}
 	if err = s.migrate(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err = db.Exec(`UPDATE skill_script_runs SET status='interrupted',error='应用意外退出，本次脚本未确认完成',finished_at=? WHERE status='running'`, timestamp()); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -69,9 +78,24 @@ func (s *Store) migrate() error {
 	if version > len(migrations) {
 		return fmt.Errorf("数据库版本 %d 高于当前程序支持版本", version)
 	}
+	if version > 0 {
+		var current bool
+		if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name='attachments') AND (NOT EXISTS(SELECT 1 FROM sqlite_master WHERE name='model_configs') OR EXISTS(SELECT 1 FROM pragma_table_info('model_configs') WHERE name='context_tokens'))`).Scan(&current); err != nil {
+			return err
+		}
+		if !current {
+			return fmt.Errorf("开发数据库结构已调整，请先备份数据目录，再重建数据库；工作目录中的文件无需删除")
+		}
+	}
 	if version == len(migrations) {
 		return nil
 	}
+	// Table rebuilds keep their original names and references. Validate the
+	// complete migrated graph before committing, then restore enforcement.
+	if _, err := s.db.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
+		return err
+	}
+	defer s.db.Exec(`PRAGMA foreign_keys=ON`)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -84,6 +108,13 @@ func (s *Store) migrate() error {
 		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", i+1)); err != nil {
 			return err
 		}
+	}
+	var violations int
+	if err = tx.QueryRow(`SELECT count(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {
+		return err
+	}
+	if violations != 0 {
+		return fmt.Errorf("数据迁移发现 %d 处关联错误", violations)
 	}
 	return tx.Commit()
 }

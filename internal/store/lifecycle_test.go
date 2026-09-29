@@ -12,7 +12,7 @@ func TestStopDeliveryRaceAndLateCompletion(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			s, _, dir := groupFixture(t)
-			d := scheduleTest(t, s, "race", "lead")
+			d := scheduleLegacyLeadTest(t, s, "race")
 			r, _ := claimTest(t, s, d.Runs[0])
 			r.Text = "停止时保留的部分内容"
 			r.Revision += 8
@@ -74,7 +74,7 @@ func TestStopDeliveryRaceAndLateCompletion(t *testing.T) {
 
 func TestRetryPreservesTriggerBudgetAndSurvivesRestart(t *testing.T) {
 	s, _, dir := groupFixture(t)
-	d := scheduleTest(t, s, "first", "lead")
+	d := scheduleLegacyLeadTest(t, s, "first")
 	original, _ := claimTest(t, s, d.Runs[0])
 	sent, err := s.Deliver(original.ID, "sent", SendInput{TargetAgentID: "b", Content: "old committed task"}, "sent-m", "sent-r")
 	if err != nil {

@@ -3,7 +3,6 @@ package app
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,78 +16,58 @@ import (
 	"tongxi/internal/store"
 )
 
-func TestStopOrDisableWhileReceiverQueuedIgnoresLateModelOutput(t *testing.T) {
-	for _, mode := range []string{"chain", "queued-run", "disable"} {
+func TestStopOrDisableDuringLeadMemberIgnoresLateModelOutput(t *testing.T) {
+	for _, mode := range []string{"chain", "run", "disable"} {
 		t.Run(mode, func(t *testing.T) {
 			s, c, agents := groupService(t)
-			invocations := 0
-			s.newChatModel = func(context.Context, string, string, string) (model.ToolCallingChatModel, error) {
-				invocations++
-				return &scriptedModel{stream: func(ctx context.Context, in []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
-					if in[len(in)-1].Role == schema.User {
-						args, _ := json.Marshal(store.SendInput{TargetAgentID: agents[1].ID, Content: "review"})
-						r, w := schema.Pipe[*schema.Message](1)
-						w.Send(toolMessage("send_message", string(args)), nil)
-						w.Close()
-						return r, nil
+			s.newChatModel = func(_ context.Context, _ string, name string, _ string) (model.ToolCallingChatModel, error) {
+				return &scriptedModel{stream: func(ctx context.Context, _ []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
+					reader, writer := schema.Pipe[*schema.Message](4)
+					if name == "writer" {
+						writer.Send(leadTool(testLeadStep(agents[1].ID, "待完善方案")), nil)
+						writer.Close()
+						return reader, nil
 					}
-					r, w := schema.Pipe[*schema.Message](4)
 					go func() {
-						defer w.Close()
-						w.Send(schema.AssistantMessage("保留部分", nil), nil)
+						defer writer.Close()
+						writer.Send(schema.AssistantMessage("保留部分", nil), nil)
 						<-ctx.Done()
-						w.Send(schema.AssistantMessage("不得展示的迟到结果", nil), nil)
-						w.Send(toolMessage("send_message", `{"target_agent_id":"late","content":"late"}`), nil)
+						writer.Send(schema.AssistantMessage("不得展示的迟到结果", nil), nil)
 					}()
-					return r, nil
+					return reader, nil
 				}}, nil
 			}
 			events := make(chan store.ConversationRun, 128)
 			s.StartScheduler(func(r store.ConversationRun) { events <- r })
-			d, err := s.Schedule(store.ScheduleRequest{RequestID: "stop-race-test-request", ConversationID: c.ID, Content: "test", Action: "lead"})
+			d, err := s.Schedule(store.ScheduleRequest{RequestID: "stop-adaptive-lead-" + mode, ConversationID: c.ID, Content: "test", Action: "lead"})
 			if err != nil {
 				t.Fatal(err)
 			}
+			waitRun(t, events, d.Runs[0].ID, "completed")
+			detail, _ := s.Conversation(c.ID)
+			member := detail.Runs[1]
 			for {
-				update := waitRun(t, events, d.Runs[0].ID, "running")
+				update := waitRun(t, events, member.ID, "running")
 				if update.Text != "" {
 					break
 				}
 			}
-			detail, _ := s.Conversation(c.ID)
-			if len(detail.Runs) != 2 || detail.Runs[1].Status != "queued" {
-				t.Fatal("receiver not queued", detail.Runs)
-			}
 			switch mode {
 			case "chain":
 				err = s.StopChain(d.ChainID)
-			case "queued-run":
-				err = s.StopRun(detail.Runs[1].ID)
+			case "run":
+				err = s.StopRun(member.ID)
 			case "disable":
 				_, err = s.SetAgentEnabled(agents[1].ID, false)
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			waitRun(t, events, d.Runs[0].ID, "cancelled")
-			waitRun(t, events, d.Runs[0].ID, "cancelled")
-			if mode == "disable" {
-				if _, err = s.SetAgentEnabled(agents[1].ID, true); err != nil {
-					t.Fatal(err)
-				}
-			}
+			waitRun(t, events, member.ID, "cancelled")
+			waitRun(t, events, member.ID, "cancelled")
 			detail, _ = s.Conversation(c.ID)
-			if len(detail.Runs) != 2 || len(detail.Messages) != 2 || detail.Chains[0].Status != "stopped" {
-				t.Fatal("stop leaked work", detail)
-			}
-			if detail.Runs[0].Text != "保留部分" || detail.Runs[1].Status != "cancelled" {
-				t.Fatal("late output changed terminal data", detail.Runs)
-			}
-			s.mu.Lock()
-			count := invocations
-			s.mu.Unlock()
-			if count != 1 {
-				t.Fatal("receiver executed after stop", count)
+			if detail.Chains[0].Status != "stopped" || len(detail.Runs) != 2 || len(detail.Messages) != 3 || detail.Runs[1].Text != "保留部分" {
+				t.Fatal(detail)
 			}
 		})
 	}
@@ -105,7 +84,7 @@ func TestRetryUsesServiceSchedulerWithoutDuplicatingMessages(t *testing.T) {
 				return nil, errors.New("intentional provider failure")
 			}
 			r, w := schema.Pipe[*schema.Message](1)
-			w.Send(schema.AssistantMessage("重试成功", nil), nil)
+			w.Send(leadTool(completedLeadStep("重试成功")), nil)
 			w.Close()
 			return r, nil
 		}}, nil

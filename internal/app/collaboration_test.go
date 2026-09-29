@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -57,7 +55,8 @@ func groupService(t *testing.T) (*Service, store.Conversation, []store.Agent) {
 	members := []store.Agent{}
 	ids := []string{}
 	for _, name := range []string{"writer", "reviewer", "planner"} {
-		a, err := s.SaveAgent(AgentInput{Name: name, Instruction: name + "-system", BaseURL: "https://example.test/v1", Model: name, APIKey: "group-secret", Tools: []string{"count_characters"}})
+		m := saveTestModel(t, s, name, "group-secret")
+		a, err := s.SaveAgent(AgentInput{Name: name, Instruction: name + "-system", ModelID: m.ID, Tools: []string{"count_characters"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -88,113 +87,6 @@ func awaitGroup(t *testing.T, events <-chan store.ConversationRun, n int) {
 		}
 	}
 }
-func TestEinoAsynchronousCollaborationAndBudget(t *testing.T) {
-	for _, loop := range []bool{false, true} {
-		t.Run(fmt.Sprint(loop), func(t *testing.T) {
-			s, c, agents := groupService(t)
-			created := 0
-			s.newChatModel = func(_ context.Context, _ string, name string, _ string) (model.ToolCallingChatModel, error) {
-				created++
-				turn := created
-				return &collaborationModel{next: func(ctx context.Context, in []*schema.Message, tools map[string]bool) (*schema.Message, error) {
-					final := (!loop && turn == 3) || (loop && turn == 6)
-					if final {
-						if tools["send_message"] || name != "writer" || !strings.Contains(in[0].Content, "最终总结") {
-							return nil, errors.New("final conclusion was not handed back to lead")
-						}
-					} else if !tools["list_agents"] || !tools["send_message"] {
-						return nil, errors.New("collaboration tools missing")
-					}
-					if turn == 1 && (!strings.Contains(in[0].Content, agents[1].ID) || !strings.Contains(in[0].Content, "必须先")) {
-						return nil, errors.New("lead missing roster or proactive orchestration instructions")
-					}
-					last := in[len(in)-1]
-					if last.Role == schema.User {
-						if turn > 1 && !strings.Contains(last.Content, fmt.Sprintf("public-turn-%d", turn-1)) {
-							return nil, errors.New("missing predecessor public result")
-						}
-						for _, msg := range in[:len(in)-1] {
-							if name == "reviewer" && turn == 2 && msg.Role == schema.Tool {
-								return nil, errors.New("another agent's private trace leaked")
-							}
-						}
-						if final {
-							return schema.AssistantMessage(fmt.Sprintf("public-turn-%d 汇总完成", turn), nil), nil
-						}
-						if !loop && turn == 2 {
-							// The member simply speaks: no explicit tool call back to the lead.
-							return schema.AssistantMessage("public-turn-2 评审意见", nil), nil
-						}
-						return toolMessage("list_agents", `{}`), nil
-					}
-					if last.ToolName == "list_agents" {
-						var members []store.Member
-						if err := json.Unmarshal([]byte(last.Content), &members); err != nil || len(members) != 3 {
-							return nil, errors.New("invalid member tool result")
-						}
-						target := agents[1].ID
-						if name == "reviewer" {
-							target = agents[2].ID
-						}
-						args, _ := json.Marshal(store.SendInput{TargetAgentID: target, Content: fmt.Sprintf("request-%d", turn)})
-						return toolMessage("send_message", string(args)), nil
-					}
-					var result sendResult
-					if err := json.Unmarshal([]byte(last.Content), &result); err != nil {
-						return nil, err
-					}
-					if turn < 5 && result.Status != "queued" {
-						return nil, fmt.Errorf("not queued: %s", last.Content)
-					}
-					if turn == 5 && (result.Status != "rejected" || !strings.Contains(result.Error, "上限")) {
-						return nil, errors.New("loop limit not reported")
-					}
-					return schema.AssistantMessage(fmt.Sprintf("public-turn-%d", turn), nil), nil
-				}}, nil
-			}
-			events := make(chan store.ConversationRun, 1000)
-			s.StartScheduler(func(r store.ConversationRun) { events <- r })
-			d, err := s.Schedule(store.ScheduleRequest{RequestID: "group-initial-delivery", ConversationID: c.ID, Action: "lead", Content: "合作写作"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			n := 3
-			if loop {
-				n = 6
-			}
-			awaitGroup(t, events, n)
-			detail, err := s.Conversation(c.ID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(detail.Runs) != n || detail.Chains[0].Status != "completed" || detail.Chains[0].Reserved != n {
-				t.Fatal("incorrect collaboration", detail.Chains, len(detail.Runs))
-			}
-			for i, r := range detail.Runs {
-				want := agents[0].ID
-				if i > 0 && i < n-1 {
-					want = agents[1+(i-1)%2].ID
-				}
-				if r.AgentID != want || r.ChainID != d.ChainID {
-					t.Fatal("identity/chain crossed", r)
-				}
-			}
-			if loop && !strings.Contains(detail.Chains[0].Reason, "上限") {
-				t.Fatal("limit missing in UI")
-			}
-			if len(detail.Messages) != 2*n-1 {
-				t.Fatal("unexpected broadcast/duplicate messages", len(detail.Messages))
-			}
-			// A final public message never schedules the unused third member.
-			for _, r := range detail.Runs {
-				if !loop && r.AgentID == agents[2].ID {
-					t.Fatal("public reply broadcast to third member")
-				}
-			}
-		})
-	}
-}
-
 func TestEinoRoundMentionAndSummaryCannotSendMessages(t *testing.T) {
 	s, c, agents := groupService(t)
 	s.newChatModel = func(_ context.Context, _ string, name string, _ string) (model.ToolCallingChatModel, error) {
@@ -202,7 +94,7 @@ func TestEinoRoundMentionAndSummaryCannotSendMessages(t *testing.T) {
 			if tools["send_message"] || tools["list_agents"] {
 				return nil, errors.New("scheduled speaker exposed collaboration tools")
 			}
-			last := in[len(in)-1]
+			last := &schema.Message{Content: promptText(in)}
 			if name == "reviewer" && !strings.Contains(last.Content, "writer-public") {
 				return nil, errors.New("reviewer missed writer")
 			}
@@ -235,4 +127,13 @@ func TestEinoRoundMentionAndSummaryCannotSendMessages(t *testing.T) {
 			t.Fatal(r)
 		}
 	}
+}
+
+func promptText(messages []*schema.Message) string {
+	var out strings.Builder
+	for _, message := range messages {
+		out.WriteString(message.Content)
+		out.WriteByte('\n')
+	}
+	return out.String()
 }

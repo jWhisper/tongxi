@@ -13,6 +13,8 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/zalando/go-keyring"
 	"tongxi/internal/agent"
+	"tongxi/internal/material"
+	"tongxi/internal/scriptrun"
 	"tongxi/internal/store"
 )
 
@@ -43,27 +45,30 @@ type Snapshot struct {
 }
 
 type Service struct {
-	ctx          context.Context
-	db           *store.Store
-	vault        Vault
-	emit         func(store.ProbeRun)
-	mu           sync.Mutex
-	wg           sync.WaitGroup
-	active       *store.ProbeRun
-	cancel       context.CancelFunc
-	closing      bool
-	execute      func(context.Context, model.ToolCallingChatModel, string, func(agent.Update)) error
-	queueWake    chan struct{}
-	queueCancel  context.CancelFunc
-	chatCancel   context.CancelFunc
-	chatActive   *store.ConversationRun
-	chatEmit     func(store.ConversationRun)
-	newChatModel func(context.Context, string, string, string) (model.ToolCallingChatModel, error)
-	chatTimeout  time.Duration
+	web           *material.Web
+	executeScript func(context.Context, scriptrun.Request) scriptrun.Result
+	ctx           context.Context
+	db            *store.Store
+	vault         Vault
+	emit          func(store.ProbeRun)
+	mu            sync.Mutex
+	wg            sync.WaitGroup
+	active        *store.ProbeRun
+	cancel        context.CancelFunc
+	closing       bool
+	execute       func(context.Context, model.ToolCallingChatModel, string, func(agent.Update)) error
+	queueWake     chan struct{}
+	queueCancel   context.CancelFunc
+	chatCancel    context.CancelFunc
+	chatActive    *store.ConversationRun
+	chatEmit      func(store.ConversationRun)
+	newChatModel  func(context.Context, string, string, string) (model.ToolCallingChatModel, error)
+	chatTimeout   time.Duration
+	testCancel    context.CancelFunc
 }
 
 func NewService(ctx context.Context, db *store.Store, vault Vault, emit func(store.ProbeRun)) *Service {
-	return &Service{ctx: ctx, db: db, vault: vault, emit: emit, execute: agent.Run, newChatModel: agent.NewModel, chatTimeout: 90 * time.Second}
+	return &Service{ctx: ctx, db: db, vault: vault, emit: emit, execute: agent.Run, newChatModel: agent.NewModel, chatTimeout: 180 * time.Second, web: material.NewWeb(), executeScript: scriptrun.Execute}
 }
 
 func settingsView(v store.Settings) SettingsView {
@@ -280,6 +285,9 @@ func (s *Service) StopProbe(id string) error {
 func (s *Service) Close() {
 	s.mu.Lock()
 	s.closing = true
+	if s.testCancel != nil {
+		s.testCancel()
+	}
 	if s.chatActive != nil && s.chatActive.Status == "running" {
 		r := cloneChat(*s.chatActive)
 		r.Status, r.Error, r.FinishedAt = "interrupted", "应用退出，本次执行中断；可手动重试或重新安排", time.Now().UTC().Format(time.RFC3339Nano)

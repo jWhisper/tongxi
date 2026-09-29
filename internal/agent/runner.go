@@ -20,8 +20,9 @@ import (
 const LocalPrompt = "请调用 count_characters 工具，统计「同席」的 Unicode 字符数，再用一句中文告诉我结果。"
 
 type Update struct {
-	Text string
-	Tool string
+	Text       string
+	Tool       string
+	Compacting *bool
 }
 type CountInput struct {
 	Text string `json:"text" jsonschema:"description=要统计的文本"`
@@ -48,6 +49,8 @@ func Run(ctx context.Context, cm model.ToolCallingChatModel, prompt string, emit
 }
 
 type Config struct {
+	Context                        *ContextConfig
+	MaxIterations                  int
 	Name, Description, Instruction string
 	Tools                          []string
 	ExtraTools                     []tool.BaseTool
@@ -74,15 +77,32 @@ func RunConversation(ctx context.Context, cm model.ToolCallingChatModel, config 
 			tools = append(tools, count)
 		}
 	}
+	iterations := config.MaxIterations
+	if iterations == 0 {
+		iterations = 4
+	}
+	var handlers []adk.ChatModelAgentMiddleware
+	var options []adk.AgentRunOption
+	if config.Context != nil {
+		var outputTokens int
+		handlers, outputTokens, err = newContextHandlers(ctx, cm, config.Context, func(active bool) {
+			emit(Update{Compacting: &active})
+		})
+		if err != nil {
+			return nil, err
+		}
+		options = append(options, adk.WithChatModelOptions([]model.Option{model.WithMaxTokens(outputTokens)}))
+	}
 	a, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name: config.Name, Description: config.Description, Model: cm, MaxIterations: 4,
+		Name: config.Name, Description: config.Description, Model: cm, MaxIterations: iterations,
 		Instruction: config.Instruction,
+		Handlers:    handlers,
 		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools}, ReturnDirectly: config.ReturnDirectly},
 	})
 	if err != nil {
 		return nil, err
 	}
-	iter := adk.NewRunner(ctx, adk.RunnerConfig{Agent: a, EnableStreaming: true}).Run(ctx, history)
+	iter := adk.NewRunner(ctx, adk.RunnerConfig{Agent: a, EnableStreaming: true}).Run(ctx, history, options...)
 	messages := []*schema.Message{}
 	var firstErr error
 	hasText := false

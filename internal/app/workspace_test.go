@@ -7,12 +7,20 @@ import (
 	"tongxi/internal/store"
 )
 
-func TestAgentCredentialsRemainIndependentAndPrivate(t *testing.T) {
-	s := newService(t)
-	if _, err := s.SaveSettings(SettingsInput{BaseURL: "https://example.test/v1", Model: "test", APIKey: "shared-secret"}); err != nil {
+func saveTestModel(t *testing.T, s *Service, name, key string) store.ModelConfig {
+	t.Helper()
+	m, err := s.SaveModel(ModelInput{Name: name, Provider: "compatible", BaseURL: "https://example.test/v1", Model: name, APIKey: key})
+	if err != nil {
 		t.Fatal(err)
 	}
-	create := AgentInput{Name: "助手", Instruction: "帮助写作", BaseURL: "https://example.test/v1", Model: "test", Tools: []string{"count_characters"}}
+	return m
+}
+
+func TestAgentsSelectSharedModelsWithoutCredentials(t *testing.T) {
+	s := newService(t)
+	m := saveTestModel(t, s, "shared", "shared-secret")
+	other := saveTestModel(t, s, "other", "other-secret")
+	create := AgentInput{Name: "助手", Instruction: "帮助写作", ModelID: m.ID, Tools: []string{"count_characters"}}
 	a, err := s.SaveAgent(create)
 	if err != nil {
 		t.Fatal(err)
@@ -22,62 +30,46 @@ func TestAgentCredentialsRemainIndependentAndPrivate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.ID == b.ID || a.KeyRef != b.KeyRef {
-		t.Fatal("same-name identity or shared credential wrong")
-	}
-	if _, err = s.SaveSettings(SettingsInput{BaseURL: "https://example.test/v1", Model: "test", APIKey: "new-default-secret"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.vault.Get(a.KeyRef); err != nil {
-		t.Fatal("rotating default deleted role credential")
+		t.Fatal("shared model not resolved")
 	}
 	edit := create
-	edit.ID = a.ID
-	edit.Version = a.Version
-	edit.Name = "编辑后"
-	edit.APIKey = "agent-a-secret"
+	edit.ID, edit.Version, edit.ModelID = a.ID, a.Version, other.ID
 	updated, err := s.SaveAgent(edit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.KeyRef == b.KeyRef {
-		t.Fatal("role credentials were not isolated")
-	}
-	if _, err = s.vault.Get(b.KeyRef); err != nil {
-		t.Fatal("editing one role deleted another role credential")
+	unchanged, _ := s.db.Agent(b.ID)
+	if updated.ModelID != other.ID || unchanged.ModelID != m.ID {
+		t.Fatal("role model selection leaked")
 	}
 	workspace, err := s.Workspace()
 	if err != nil {
 		t.Fatal(err)
 	}
 	data, _ := json.Marshal(workspace)
-	for _, secret := range []string{"shared-secret", "new-default-secret", "agent-a-secret", a.KeyRef, updated.KeyRef} {
+	for _, secret := range []string{"shared-secret", "other-secret", a.KeyRef, updated.KeyRef} {
 		if strings.Contains(string(data), secret) {
 			t.Fatal("workspace returned credential or reference")
 		}
 	}
-	edit.APIKey = ""
-	edit.Version = updated.Version
-	edit.BaseURL = "https://other.test/v1"
 	if _, err = s.SaveAgent(edit); err == nil {
-		t.Fatal("endpoint change reused credential")
+		t.Fatal("stale role overwritten")
 	}
-	edit.BaseURL = create.BaseURL
-	edit.Version = a.Version
+	edit.Version = updated.Version
+	edit.ModelID = "missing"
 	if _, err = s.SaveAgent(edit); err == nil {
-		t.Fatal("stale edit overwritten")
+		t.Fatal("unknown model accepted")
 	}
 }
 
 func TestWorkspaceFailurePreservesSavedData(t *testing.T) {
 	s := newService(t)
-	_, err := s.SaveAgent(AgentInput{Name: "助手", Instruction: "指令", BaseURL: "https://example.test/v1", Model: "test"})
-	if err == nil || !strings.Contains(err.Error(), "API Key") {
+	_, err := s.SaveAgent(AgentInput{Name: "助手", Instruction: "指令", ModelID: "missing"})
+	if err == nil || !strings.Contains(err.Error(), "模型配置不存在") {
 		t.Fatal("missing key not explained")
 	}
-	if _, err = s.SaveSettings(SettingsInput{BaseURL: "https://example.test/v1", Model: "test", APIKey: "secret"}); err != nil {
-		t.Fatal(err)
-	}
-	a, err := s.SaveAgent(AgentInput{Name: "助手", Instruction: "指令", BaseURL: "https://example.test/v1", Model: "test"})
+	config := saveTestModel(t, s, "test", "secret")
+	a, err := s.SaveAgent(AgentInput{Name: "助手", Instruction: "指令", ModelID: config.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +93,7 @@ func TestWorkspaceFailurePreservesSavedData(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.db.Close()
-	_, err = s.SaveAgent(AgentInput{Name: "未保存", Instruction: "指令", BaseURL: "https://example.test/v1", Model: "test"})
+	_, err = s.SaveAgent(AgentInput{Name: "未保存", Instruction: "指令", ModelID: "missing"})
 	if err == nil || !strings.Contains(err.Error(), "本地数据读写失败") {
 		t.Fatalf("storage failure not distinguished: %v", err)
 	}

@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
-	"unicode/utf8"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -34,7 +33,8 @@ func insertMessage(tx *sql.Tx, m *Message) error {
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(sequence),0)+1 FROM messages WHERE conversation_id=?`, m.ConversationID).Scan(&m.Sequence); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`INSERT INTO messages(id,conversation_id,sequence,sender_type,sender_id,sender_name,content,created_at,target_agent_id,reply_to_message_id,source_run_id) VALUES(?,?,?,?,NULLIF(?,''),?,?,?,NULLIF(?,''),NULLIF(?,''),NULLIF(?,''))`, m.ID, m.ConversationID, m.Sequence, m.SenderType, m.SenderID, m.SenderName, m.Content, m.CreatedAt, m.TargetAgentID, m.ReplyToMessageID, m.SourceRunID); err != nil {
+	attachments, _ := json.Marshal(m.Attachments)
+	if _, err := tx.Exec(`INSERT INTO messages(id,conversation_id,sequence,sender_type,sender_id,sender_name,content,created_at,target_agent_id,reply_to_message_id,source_run_id,attachments) VALUES(?,?,?,?,NULLIF(?,''),?,?,?,NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),?)`, m.ID, m.ConversationID, m.Sequence, m.SenderType, m.SenderID, m.SenderName, m.Content, m.CreatedAt, m.TargetAgentID, m.ReplyToMessageID, m.SourceRunID, string(attachments)); err != nil {
 		return err
 	}
 	_, err := tx.Exec(`UPDATE conversations SET updated_at=? WHERE id=?`, m.CreatedAt, m.ConversationID)
@@ -55,41 +55,14 @@ func (s *Store) StartConversationRun(r ConversationRun, a Agent) error {
 	return err
 }
 
-// History is kept in complete turns so a window never separates tool calls
-// from their results. Failed or cancelled turns are retained but not replayed.
+// ModelHistory loads saved compacted context followed by uncovered complete turns.
 func (s *Store) ModelHistory(agentID, conversationID string) ([]*schema.Message, error) {
-	rows, err := s.db.Query(`SELECT transcript FROM runs WHERE agent_id=? AND conversation_id=? AND status='completed' AND kind='reply' AND silent=0 ORDER BY rowid DESC LIMIT 12`, agentID, conversationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	turns := [][]*schema.Message{}
-	characters := 0
-	for rows.Next() {
-		var data string
-		if err = rows.Scan(&data); err != nil {
-			return nil, err
-		}
-		characters += utf8.RuneCountInString(data)
-		if characters > 48000 {
-			break
-		}
-		var turn []*schema.Message
-		if err = json.Unmarshal([]byte(data), &turn); err != nil {
-			return nil, err
-		}
-		turns = append(turns, turn)
-	}
-	history := []*schema.Message{}
-	for i := len(turns) - 1; i >= 0; i-- {
-		history = append(history, turns[i]...)
-	}
-	return history, rows.Err()
+	return s.ContextHistory(agentID, conversationID, "reply")
 }
 
 // A completed public reply and terminal run state are committed together.
 // Terminal states are immutable, including when a model returns after cancel.
-func (s *Store) FinishConversationRun(r ConversationRun, transcript []*schema.Message, replyID string) error {
+func (s *Store) FinishConversationRun(r ConversationRun, transcript []*schema.Message, replyID string, contextState ...*ContextState) error {
 	data, err := json.Marshal(transcript)
 	if err != nil {
 		return err
@@ -122,9 +95,16 @@ func (s *Store) FinishConversationRun(r ConversationRun, transcript []*schema.Me
 		}
 	}
 	if n == 1 {
-		if r.Status != "completed" {
-			if err = restoreCursor(tx, r.ID); err != nil {
-				return err
+		if r.Status == "completed" {
+			if r.Kind != "selector" {
+				if _, err = tx.Exec(`INSERT INTO member_cursors(conversation_id,agent_id,sequence) SELECT conversation_id,agent_id,read_upper FROM runs WHERE id=? AND read_upper>0 ON CONFLICT(conversation_id,agent_id) DO UPDATE SET sequence=MAX(sequence,excluded.sequence)`, r.ID); err != nil {
+					return err
+				}
+			}
+			if len(contextState) > 0 && contextState[0] != nil {
+				if err = saveContext(tx, r, contextState[0]); err != nil {
+					return err
+				}
 			}
 		}
 		if err = finishChain(tx, r); err != nil {

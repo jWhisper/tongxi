@@ -146,10 +146,10 @@ func TestGroupRoundAtomicityIdempotencyAndPublicContext(t *testing.T) {
 	}
 }
 
-func TestToolDeliveryBindsIdentityValidatesAndReservesConcurrently(t *testing.T) {
+func TestLegacyToolDeliveryBindsIdentityValidatesAndReservesConcurrently(t *testing.T) {
 	s, _, _ := groupFixture(t)
 	addAgent(t, s, "outsider")
-	d := scheduleTest(t, s, "lead", "lead")
+	d := scheduleLegacyLeadTest(t, s, "lead")
 	r, _ := claimTest(t, s, d.Runs[0])
 	external, err := s.AppendMessage(Message{ID: "external", ConversationID: "two", SenderType: "user", Content: "private"})
 	if err != nil {

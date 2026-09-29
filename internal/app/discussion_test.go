@@ -61,7 +61,7 @@ func TestEinoFreeDiscussionChoosesSkipsAndPausesWithoutHost(t *testing.T) {
 					return nil, errors.New("selector inherited member personality")
 				}
 				for _, m := range in {
-					if m.Role == schema.Tool {
+					if m.Role == schema.Tool && m.ToolName != "choose_speaker" && m.ToolName != "pause_discussion" {
 						return nil, errors.New("selector read member's private history")
 					}
 				}
@@ -80,7 +80,7 @@ func TestEinoFreeDiscussionChoosesSkipsAndPausesWithoutHost(t *testing.T) {
 			if name == "reviewer" {
 				return toolMessage("skip_reply", `{}`), nil
 			}
-			if name == "writer" && !strings.Contains(in[len(in)-1].Content, "planner-public") {
+			if name == "writer" && !strings.Contains(promptText(in), "planner-public") {
 				return nil, errors.New("speaker missed previous opinion")
 			}
 			return schema.AssistantMessage(name+"-public", nil), nil

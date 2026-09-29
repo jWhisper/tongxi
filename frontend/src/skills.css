@@ -1,0 +1,21 @@
+.skill-content { display: block; width: 100%; box-sizing: border-box; resize: vertical; margin-top: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #f8fafb; font: 12px/1.8 Menlo, "PingFang SC", monospace; }
+.skill-content:focus-visible { outline: 3px solid #70b6ac; outline-offset: 2px; }
+.skill-resources { margin-top: 18px; font-size: 12px; }
+.skill-resources summary { cursor: pointer; overflow-wrap: anywhere; }
+.skill-resources pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow: auto; padding: 16px; background: #f8fafb; font: 12px/1.8 Menlo, "PingFang SC", monospace; }
+.skill-note { padding: 12px; border-left: 2px solid var(--accent); background: #edf5f2; font-size: 12px; line-height: 1.8; }
+.skill-editor .skill-enabled { display: flex; align-items: center; gap: 8px; }
+.skill-editor .skill-enabled input { width: auto; margin: 0; }
+.skill-bindings { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
+.skill-bindings h3 { font-size: 13px; margin: 0 0 12px; }
+.skill-bindings label { overflow-wrap: anywhere; }
+.skill-use-history { padding: 12px 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.skill-use-history summary { cursor: pointer; color: var(--accent); }
+.skill-use-history > p { line-height: 1.7; }
+.skill-use-row { width: 100%; display: flex; justify-content: space-between; gap: 12px; text-align: left; padding: 7px 0; }
+.skill-use-history[open] { max-height: 180px; overflow: auto; }
+.skill-use-history time { white-space: nowrap; color: var(--muted); font-size: 11px; }
+@media (max-width: 550px) { .skill-use-row { flex-direction: column; gap: 4px; } }
+.skill-script-run { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.skill-script-run pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; font-size: 12px; }
+.skill-script-run li { overflow-wrap: anywhere; }

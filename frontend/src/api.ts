@@ -1,8 +1,12 @@
 import {
-  Snapshot,
-  SaveSettings,
-  StartProbe,
-  StopProbe,
+	Skills,
+	SaveSkill,
+	SkillContent,
+	ImportSkill,
+  Models,
+  SaveModel,
+  DeleteModel,
+  TestModel,
   Workspace,
   SaveAgent,
   SetAgentEnabled,
@@ -14,34 +18,30 @@ import {
   StopChain,
   RetryRun,
   Schedule,
+  ImportSources,
+  ReadSource,
+  AddWebSource,
+  ExportVersion,
+  ChooseWorkspaceDirectory,
+  OpenWorkspaceDirectory,
+  ListWorkspaceFiles,
+  ReadWorkspaceFile,
+  OpenArtifact,
+  OpenSourceFile,
 } from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 
-export type Run = {
-  id: string;
-  source: string;
-  prompt: string;
-  status: string;
-  text: string;
-  error: string;
-  tools: string[];
-  startedAt: string;
-  finishedAt: string;
-  revision: number;
-};
-export type Settings = { baseURL: string; model: string; hasKey: boolean };
-export const emptySettings: Settings = {
-  baseURL: "",
-  model: "",
-  hasKey: false,
-};
 export const isDesktop = () =>
   Boolean((window as unknown as { go?: unknown }).go);
 export const api = {
-  snapshot: Snapshot,
-  saveSettings: SaveSettings,
-  start: StartProbe,
-  stop: StopProbe,
+	skills: Skills,
+  saveSkill: (input: SkillInput) => SaveSkill(new app.SkillInput(input)),
+	skillContent: SkillContent,
+	importSkill: ImportSkill,
+  models: Models,
+  saveModel: SaveModel,
+  deleteModel: DeleteModel,
+  testModel: TestModel,
   workspace: Workspace,
   saveAgent: SaveAgent,
   setAgentEnabled: SetAgentEnabled,
@@ -53,32 +53,58 @@ export const api = {
   stopChain: StopChain,
   retryRun: RetryRun,
   schedule: Schedule,
+  importSources: ImportSources,
+  readSource: ReadSource,
+  addWebSource: AddWebSource,
+  exportVersion: ExportVersion,
+  chooseWorkspaceDirectory: ChooseWorkspaceDirectory,
+  openWorkspaceDirectory: OpenWorkspaceDirectory,
+  listWorkspaceFiles: ListWorkspaceFiles,
+  readWorkspaceFile: ReadWorkspaceFile,
+  openArtifact: OpenArtifact,
+  openSourceFile: OpenSourceFile,
 };
-export const subscribe = (callback: (run: Run) => void) =>
-  EventsOn("probe:updated", callback);
-
-// Full snapshots plus monotonic revisions avoid lost deltas and late-event rollback.
-export function mergeRuns(previous: Run[], incoming: Run[]): Run[] {
-  const map = new Map(previous.map((run) => [run.id, run]));
-  for (const run of incoming) {
-    if (!map.has(run.id) || map.get(run.id)!.revision < run.revision)
-      map.set(run.id, run);
-  }
-  return [...map.values()].sort((a, b) =>
-    a.startedAt.localeCompare(b.startedAt),
-  );
-}
-
-import type { app, store } from "../wailsjs/go/models";
+import { app } from "../wailsjs/go/models";
+import type { store, material } from "../wailsjs/go/models";
+export type WorkspacePage = material.WorkspacePage;
+export type Skill = store.Skill;
+export type SkillInput = Pick<app.SkillInput, "id" | "updatedAt" | "enabled" | "content" | "resources" | "scripts" | "note">;
+export type SkillUse = store.SkillUse;
+export type ScriptRun = store.ScriptRun;
+export type Artifact = store.Artifact;
+export type ArtifactDelivery = store.ArtifactDelivery;
+export type ModelConfig = store.ModelConfig;
+export type ModelInput = app.ModelInput;
 export type Agent = store.Agent;
 export type AgentInput = app.AgentInput;
 export type Conversation = store.Conversation;
 export type ConversationDetail = Pick<
   app.ConversationDetail,
-  "conversation" | "messages" | "runs" | "chains"
+  | "conversation"
+  | "messages"
+  | "runs"
+  | "chains"
+  | "leadSteps"
+  | "tasks"
+  | "versions"
+  | "sources"
+  | "skillUses"
+  | "scriptRuns"
+  | "artifacts"
 >;
+export type Source = store.Source;
+export type SourcePage = store.SourcePage;
+export type Citation = store.Citation;
+export type WorkTask = store.WorkTask;
+export type WorkVersion = store.WorkVersion;
+export type Chain = store.Chain;
+export type LeadStep = store.LeadStep;
+export type Message = store.Message;
 export type ConversationRun = store.ConversationRun;
-export type WorkspaceData = Pick<app.Workspace, "agents" | "conversations">;
+export type WorkspaceData = Pick<
+  app.Workspace,
+  "agents" | "conversations" | "models" | "skills"
+>;
 export const subscribeWorkspace = (callback: () => void) =>
   EventsOn("workspace:changed", callback);
 

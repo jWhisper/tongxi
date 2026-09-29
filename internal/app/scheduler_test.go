@@ -29,7 +29,8 @@ func (m *scriptedModel) Stream(ctx context.Context, in []*schema.Message, _ ...m
 
 func chatFixture(t *testing.T, s *Service) (store.Agent, store.Conversation, store.Conversation) {
 	t.Helper()
-	a, err := s.SaveAgent(AgentInput{Name: "原名", Instruction: "原始指令", BaseURL: "https://example.test/v1", Model: "test", APIKey: "chat-secret", Tools: []string{"count_characters"}})
+	m := saveTestModel(t, s, "test", "chat-secret")
+	a, err := s.SaveAgent(AgentInput{Name: "原名", Instruction: "原始指令", ModelID: m.ID, Tools: []string{"count_characters"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +51,9 @@ func waitRun(t *testing.T, events <-chan store.ConversationRun, id, status strin
 	for {
 		select {
 		case r := <-events:
+			if r.ID == id && r.Status == "failed" && status != "failed" {
+				t.Fatalf("run failed: %s", r.Error)
+			}
 			if r.ID == id && r.Status == status {
 				return r
 			}
@@ -110,10 +114,10 @@ func TestSchedulerQueueHistorySnapshotAndRestart(t *testing.T) {
 	if _, err = s.StartProbe("local", ""); err == nil {
 		t.Fatal("probe overlapped global execution slot")
 	}
-	if _, err = s.SaveAgent(AgentInput{ID: a.ID, Version: a.Version, Name: "新名", Instruction: "新指令", BaseURL: a.BaseURL, Model: a.Model, Tools: a.Tools}); err != nil {
+	if _, err = s.SaveAgent(AgentInput{ID: a.ID, Version: a.Version, Name: "新名", Instruction: "新指令", ModelID: a.ModelID, Tools: a.Tools}); err != nil {
 		t.Fatal(err)
 	}
-	if firstInput[0].Content != "原始指令" {
+	if !strings.HasPrefix(firstInput[0].Content, "原始指令\n") || !strings.Contains(firstInput[0].Content, "read_source") {
 		t.Fatal("initial configuration incorrect", firstInput[0])
 	}
 	if err = s.StopRun(third.ID); err != nil {
@@ -127,7 +131,7 @@ func TestSchedulerQueueHistorySnapshotAndRestart(t *testing.T) {
 	waitRun(t, events, second.ID, "completed")
 	<-calls // First tool result request.
 	secondInput := <-calls
-	if secondInput[0].Content != "新指令" || len(secondInput) != 6 || len(secondInput[2].ToolCalls) != 1 || secondInput[3].Role != schema.Tool {
+	if !strings.HasPrefix(secondInput[0].Content, "新指令\n") || len(secondInput) != 6 || len(secondInput[2].ToolCalls) != 1 || secondInput[3].Role != schema.Tool {
 		t.Fatalf("second turn lost transcript: %+v", secondInput)
 	}
 	<-calls // Second tool result request.

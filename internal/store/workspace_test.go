@@ -3,19 +3,24 @@ package store
 import (
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func addAgent(t *testing.T, s *Store, id string) Agent {
 	t.Helper()
-	a, err := s.SaveAgent(Agent{ID: id, Name: "同名助手", Instruction: "协助写作", BaseURL: "https://example.test/v1", Model: "test", KeyRef: "key-ref", Enabled: true, Tools: []string{"count_characters"}})
+	_, err := s.SaveModel(ModelConfig{ID: "model-" + id, Name: "test", Provider: "compatible", BaseURL: "https://example.test/v1", Model: "test", KeyRef: "key-ref"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.SaveAgent(Agent{ModelID: "model-" + id, ID: id, Name: "同名助手", Instruction: "协助写作", BaseURL: "https://example.test/v1", Model: "test", KeyRef: "key-ref", Enabled: true, Tools: []string{"count_characters"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return a
 }
 
-func TestMigrateP0AndPersistWorkspace(t *testing.T) {
+func TestOldDevelopmentSchemaRequiresRebuild(t *testing.T) {
 	dir := t.TempDir()
 	old, err := sql.Open("sqlite", filepath.Join(dir, "tongxi.db"))
 	if err != nil {
@@ -25,6 +30,25 @@ func TestMigrateP0AndPersistWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	old.Close()
+	if s, err := Open(dir); err == nil {
+		s.Close()
+		t.Fatal("silently accepted old schema")
+	} else if !strings.Contains(err.Error(), "重建") {
+		t.Fatal(err)
+	}
+	old, err = sql.Open("sqlite", filepath.Join(dir, "tongxi.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	var version int
+	if err = old.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 1 {
+		t.Fatal("old database changed", version, err)
+	}
+}
+
+func TestPersistWorkspace(t *testing.T) {
+	dir := t.TempDir()
 	s, err := Open(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -62,14 +86,6 @@ func TestMigrateP0AndPersistWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	settings, _ := s.Settings()
-	if settings.KeyRef != "existing-ref" {
-		t.Fatal("P0 configuration lost")
-	}
-	probes, _ := s.Runs()
-	if len(probes) != 1 || probes[0].Text != "ok" {
-		t.Fatal("P0 history lost")
-	}
 	gotA, _ := s.Agent(a.ID)
 	gotB, _ := s.Agent(b.ID)
 	if gotA.Enabled || gotA.Name != "新的名称" || gotB.Name != b.Name || gotB.Instruction != b.Instruction {

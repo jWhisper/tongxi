@@ -11,7 +11,10 @@ type ValidationError string
 func (e ValidationError) Error() string { return string(e) }
 
 type Agent struct {
+	SkillIDs    []string `json:"skillIDs"`
 	ID          string   `json:"id"`
+	ModelID     string   `json:"modelID"`
+	ModelName   string   `json:"modelName"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Instruction string   `json:"instruction"`
@@ -27,6 +30,7 @@ type Agent struct {
 }
 
 type Conversation struct {
+	WorkDir     string   `json:"workDir"`
 	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Kind        string   `json:"kind"`
@@ -38,47 +42,53 @@ type Conversation struct {
 }
 
 type Message struct {
-	TargetAgentID    string `json:"targetAgentID"`
-	ReplyToMessageID string `json:"replyToMessageID"`
-	SourceRunID      string `json:"sourceRunID"`
-	ID               string `json:"id"`
-	ConversationID   string `json:"conversationID"`
-	Sequence         int    `json:"sequence"`
-	SenderType       string `json:"senderType"`
-	SenderID         string `json:"senderID"`
-	SenderName       string `json:"senderName"`
-	Content          string `json:"content"`
-	CreatedAt        string `json:"createdAt"`
+	Attachments      []Source `json:"attachments"`
+	TargetAgentID    string   `json:"targetAgentID"`
+	ReplyToMessageID string   `json:"replyToMessageID"`
+	SourceRunID      string   `json:"sourceRunID"`
+	ID               string   `json:"id"`
+	ConversationID   string   `json:"conversationID"`
+	Sequence         int      `json:"sequence"`
+	SenderType       string   `json:"senderType"`
+	SenderID         string   `json:"senderID"`
+	SenderName       string   `json:"senderName"`
+	Content          string   `json:"content"`
+	CreatedAt        string   `json:"createdAt"`
 }
 
 type ConversationRun struct {
-	Kind           string   `json:"kind"`
-	Silent         bool     `json:"silent"`
-	RetryOf        string   `json:"retryOf"`
-	ChainID        string   `json:"chainID"`
-	ParentRunID    string   `json:"parentRunID"`
-	PreviousRunID  string   `json:"previousRunID"`
-	ID             string   `json:"id"`
-	ConversationID string   `json:"conversationID"`
-	AgentID        string   `json:"agentID"`
-	MessageID      string   `json:"messageID"`
-	Status         string   `json:"status"`
-	Error          string   `json:"error"`
-	CreatedAt      string   `json:"createdAt"`
-	Text           string   `json:"text"`
-	Tools          []string `json:"tools"`
-	StartedAt      string   `json:"startedAt"`
-	FinishedAt     string   `json:"finishedAt"`
-	Revision       int      `json:"revision"`
-	AgentName      string   `json:"agentName"`
+	ContextCompacting bool     `json:"contextCompacting"`
+	ActiveScript      string   `json:"activeScript"`
+	Kind              string   `json:"kind"`
+	Silent            bool     `json:"silent"`
+	RetryOf           string   `json:"retryOf"`
+	ChainID           string   `json:"chainID"`
+	ParentRunID       string   `json:"parentRunID"`
+	PreviousRunID     string   `json:"previousRunID"`
+	ID                string   `json:"id"`
+	ConversationID    string   `json:"conversationID"`
+	AgentID           string   `json:"agentID"`
+	MessageID         string   `json:"messageID"`
+	Status            string   `json:"status"`
+	Error             string   `json:"error"`
+	CreatedAt         string   `json:"createdAt"`
+	Text              string   `json:"text"`
+	Tools             []string `json:"tools"`
+	StartedAt         string   `json:"startedAt"`
+	FinishedAt        string   `json:"finishedAt"`
+	Revision          int      `json:"revision"`
+	AgentName         string   `json:"agentName"`
 }
 
 func timestamp() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 
+const agentSelect = `SELECT a.id,a.name,a.description,a.instruction,m.base_url,m.model,m.key_ref,a.tools,a.enabled,a.version,a.created_at,a.updated_at,a.model_id,m.name,
+	(SELECT json_group_array(skill_id) FROM agent_skills WHERE agent_id=a.id) FROM agents a JOIN model_configs m ON m.id=a.model_id`
+
 func scanAgent(row interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
-	var tools string
-	err := row.Scan(&a.ID, &a.Name, &a.Description, &a.Instruction, &a.BaseURL, &a.Model, &a.KeyRef, &tools, &a.Enabled, &a.Version, &a.CreatedAt, &a.UpdatedAt)
+	var tools, skills string
+	err := row.Scan(&a.ID, &a.Name, &a.Description, &a.Instruction, &a.BaseURL, &a.Model, &a.KeyRef, &tools, &a.Enabled, &a.Version, &a.CreatedAt, &a.UpdatedAt, &a.ModelID, &a.ModelName, &skills)
 	if err == sql.ErrNoRows {
 		return a, ValidationError("角色不存在")
 	}
@@ -86,12 +96,15 @@ func scanAgent(row interface{ Scan(...any) error }) (Agent, error) {
 		return a, err
 	}
 	err = json.Unmarshal([]byte(tools), &a.Tools)
+	if err == nil {
+		err = json.Unmarshal([]byte(skills), &a.SkillIDs)
+	}
 	a.HasKey = a.KeyRef != ""
 	return a, err
 }
 
 func (s *Store) Agents() ([]Agent, error) {
-	rows, err := s.db.Query(`SELECT * FROM agents ORDER BY created_at,id`)
+	rows, err := s.db.Query(agentSelect + ` ORDER BY a.created_at,a.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -107,20 +120,28 @@ func (s *Store) Agents() ([]Agent, error) {
 	return list, rows.Err()
 }
 func (s *Store) Agent(id string) (Agent, error) {
-	return scanAgent(s.db.QueryRow(`SELECT * FROM agents WHERE id=?`, id))
+	return scanAgent(s.db.QueryRow(agentSelect+` WHERE a.id=?`, id))
 }
 
 func (s *Store) SaveAgent(a Agent) (Agent, error) {
+	if len(a.SkillIDs) > 20 {
+		return a, ValidationError("每个角色最多绑定20个技能")
+	}
 	tools, err := json.Marshal(a.Tools)
 	if err != nil {
 		return a, err
 	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return a, err
+	}
+	defer tx.Rollback()
 	now := timestamp()
 	if a.Version == 0 {
-		_, err = s.db.Exec(`INSERT INTO agents VALUES(?,?,?,?,?,?,?,?,?,1,?,?)`, a.ID, a.Name, a.Description, a.Instruction, a.BaseURL, a.Model, a.KeyRef, string(tools), a.Enabled, now, now)
+		_, err = tx.Exec(`INSERT INTO agents VALUES(?,?,?,?,?,?,?,1,?,?)`, a.ID, a.Name, a.Description, a.Instruction, a.ModelID, string(tools), a.Enabled, now, now)
 	} else {
 		var result sql.Result
-		result, err = s.db.Exec(`UPDATE agents SET name=?,description=?,instruction=?,base_url=?,model=?,key_ref=?,tools=?,enabled=?,version=version+1,updated_at=? WHERE id=? AND version=?`, a.Name, a.Description, a.Instruction, a.BaseURL, a.Model, a.KeyRef, string(tools), a.Enabled, now, a.ID, a.Version)
+		result, err = tx.Exec(`UPDATE agents SET name=?,description=?,instruction=?,model_id=?,tools=?,enabled=?,version=version+1,updated_at=? WHERE id=? AND version=?`, a.Name, a.Description, a.Instruction, a.ModelID, string(tools), a.Enabled, now, a.ID, a.Version)
 		if err == nil {
 			n, _ := result.RowsAffected()
 			if n != 1 {
@@ -129,6 +150,24 @@ func (s *Store) SaveAgent(a Agent) (Agent, error) {
 		}
 	}
 	if err != nil {
+		return a, err
+	}
+	if _, err = tx.Exec(`DELETE FROM agent_skills WHERE agent_id=?`, a.ID); err != nil {
+		return a, err
+	}
+	for _, id := range a.SkillIDs {
+		var exists bool
+		if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM skills WHERE id=?)`, id).Scan(&exists); err != nil {
+			return a, err
+		}
+		if !exists {
+			return a, ValidationError("所选技能不存在，请刷新后重试")
+		}
+		if _, err = tx.Exec(`INSERT OR IGNORE INTO agent_skills VALUES(?,?)`, a.ID, id); err != nil {
+			return a, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
 		return a, err
 	}
 	return s.Agent(a.ID)
@@ -141,19 +180,19 @@ func (s *Store) SetAgentEnabled(id string, enabled bool) (Agent, error) {
 
 func (s *Store) KeyReferenced(ref string) (bool, error) {
 	var count int
-	err := s.db.QueryRow(`SELECT (SELECT count(*) FROM model_settings WHERE key_ref=?)+(SELECT count(*) FROM agents WHERE key_ref=?)`, ref, ref).Scan(&count)
+	err := s.db.QueryRow(`SELECT (SELECT count(*) FROM model_settings WHERE key_ref=?)+(SELECT count(*) FROM model_configs WHERE key_ref=?)`, ref, ref).Scan(&count)
 	return count > 0, err
 }
 
 func (s *Store) Conversations() ([]Conversation, error) {
-	rows, err := s.db.Query(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at FROM conversations ORDER BY updated_at DESC,id`)
+	rows, err := s.db.Query(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at,work_dir FROM conversations ORDER BY updated_at DESC,id`)
 	if err != nil {
 		return nil, err
 	}
 	list := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err = rows.Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err = rows.Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt, &c.WorkDir); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -190,7 +229,7 @@ func (s *Store) members(id string) ([]string, error) {
 }
 func (s *Store) Conversation(id string) (Conversation, error) {
 	var c Conversation
-	err := s.db.QueryRow(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at FROM conversations WHERE id=?`, id).Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at,work_dir FROM conversations WHERE id=?`, id).Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt, &c.WorkDir)
 	if err == sql.ErrNoRows {
 		return c, ValidationError("会话不存在")
 	}
@@ -225,11 +264,15 @@ func (s *Store) SaveConversation(c Conversation, create bool) (Conversation, err
 	defer tx.Rollback()
 	if !create {
 		var count int
-		if err = tx.QueryRow(`SELECT count(*) FROM conversations WHERE id=?`, c.ID).Scan(&count); err != nil {
+		var previous string
+		if err = tx.QueryRow(`SELECT work_dir FROM conversations WHERE id=?`, c.ID).Scan(&previous); err != nil {
+			if err == sql.ErrNoRows {
+				return c, ValidationError("会话不存在")
+			}
 			return c, err
 		}
-		if count == 0 {
-			return c, ValidationError("会话不存在")
+		if previous != "" && previous != c.WorkDir {
+			return c, ValidationError("工作目录已固定，不能更换或清空；请新建会话使用其他目录")
 		}
 		if err = tx.QueryRow(`SELECT count(*) FROM runs WHERE conversation_id=? AND status IN ('queued','running')`, c.ID).Scan(&count); err != nil {
 			return c, err
@@ -262,9 +305,9 @@ func (s *Store) SaveConversation(c Conversation, create bool) (Conversation, err
 	}
 	now := timestamp()
 	if create {
-		_, err = tx.Exec(`INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at) VALUES(?,?,?,?,NULLIF(?,''),?,?)`, c.ID, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, now)
+		_, err = tx.Exec(`INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at,work_dir) VALUES(?,?,?,?,NULLIF(?,''),?,?,?)`, c.ID, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, now, c.WorkDir)
 	} else {
-		_, err = tx.Exec(`UPDATE conversations SET title=?,kind=?,mode=?,lead_agent_id=NULLIF(?,''),updated_at=?,revision=revision+1 WHERE id=?`, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, c.ID)
+		_, err = tx.Exec(`UPDATE conversations SET title=?,kind=?,mode=?,lead_agent_id=NULLIF(?,''),updated_at=?,work_dir=?,revision=revision+1 WHERE id=?`, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, c.WorkDir, c.ID)
 	}
 	if err != nil {
 		return c, err

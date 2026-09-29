@@ -2,9 +2,13 @@
 
 > 同席 — 让你的 AI 伙伴一起交流、一起做事。
 
-更新日期：2026-09-27。
+更新日期：2026-09-29。
 
 同席是本地运行的通用 Agent 协作软件，支持创建角色、交流与分工。产品用途不限于编程，可以覆盖资料整理、写作、评审等场景。
+
+## 当前开发原则
+
+项目尚未上线，后续修改直接面向当前设计，不以兼容旧数据为目标。优先简洁清楚的代码和好看、好用的界面；具体约定见 [AGENTS.md](../AGENTS.md)。旧迭代中已记录的迁移与兼容行为保留为历史事实，不再约束后续实现。
 
 ## 文档结构
 
@@ -18,7 +22,19 @@ plan/
 │   ├── requirements.md               本期需求、范围与整体验收标准
 │   ├── implementation-plan.md        本期阶段、工作清单与阶段验收标准
 │   └── progress.md                   实际进度、验证结果、阻塞与变更记录
-└── 002-free-discussion-20260927/      自由讨论，采用同样的四份文档结构
+├── 002-free-discussion-20260927/      自由讨论，采用同样的四份文档结构
+├── 003-lead-acceptance-20260928/      带队按验收推进
+├── 004-model-settings-20260928/       集中模型设置与角色选用
+├── 005-chat-delivery-20260928/        聊天排版与独立成果阅读
+├── 006-work-versions-20260928/        跨请求修订与成果版本
+├── 007-sources-export-20260928/       文件、网页、来源引用与导出
+├── 008-work-directory-20260928/       固定会话工作目录
+├── 009-role-skills-20260928/          角色技能与使用记录
+├── 010-skill-scripts-20260928/        Python、Node.js、Shell 脚本执行
+├── 011-artifact-delivery-20260928/    文件成果交付与验收
+├── 012-conversation-layout-20260928/  会话页面精简
+├── 013-files-mentions-20260929/       文件附件与点名回复
+└── 014-context-budget-20260929/       Token 预算、持久摘要与历史回查
 ```
 
 ## 长期文档
@@ -36,6 +52,25 @@ plan/
 | --- | --- | --- | --- | --- |
 | 001 | [本地 Agent 协作 MVP](001-mvp-20260927/README.md) | 2026-09-27 | 创建角色、私聊、助手带队、多人讨论、停止与历史保存 | [进度与下一步](001-mvp-20260927/progress.md) |
 | 002 | [自由讨论](002-free-discussion-20260927/README.md) | 2026-09-27 | 两种群聊模式、动态接话、沉默与暂停、用户插话 | [进度与验证](002-free-discussion-20260927/progress.md) |
+| 003 | [带队按验收推进](003-lead-acceptance-20260928/README.md) | 2026-09-28 | 固定验收条件、按需选人、多轮修订、完整成果交付 | [进度与验证](003-lead-acceptance-20260928/progress.md) |
+| 004 | [集中模型设置](004-model-settings-20260928/README.md) | 2026-09-28 | 多配置、服务商预设、简短连接测试、角色选择模型 | [进度与验证](004-model-settings-20260928/progress.md) |
+| 005 | [聊天与成果展示](005-chat-delivery-20260928/README.md) | 2026-09-28 | Markdown、复制、进度提示、验收折叠、独立成果阅读 | [进度与验证](005-chat-delivery-20260928/progress.md) |
+| 006 | [持续修订与版本](006-work-versions-20260928/README.md) | 2026-09-28 | 续改、补资料恢复、验收条件继承、版本对比与历史版续改 | [进度与验证](006-work-versions-20260928/progress.md) |
+
+| 007 | [资料、网页与导出](007-sources-export-20260928/README.md) | 2026-09-28 | 六类文件读取、网页搜索、可定位引用、Markdown/Word 导出 | [进度与验证](007-sources-export-20260928/progress.md) |
+
+| 008 | [固定会话工作目录](008-work-directory-20260928/README.md) | 2026-09-28 | 一次绑定、默认读取目录、同轮快照与默认成果目录 | [进度与验证](008-work-directory-20260928/progress.md) |
+| 009 | [角色技能与使用记录](009-role-skills-20260928/README.md) | 2026-09-28 | 统一管理、角色绑定、按需加载、最新内容与使用记录 | [进度与验证](009-role-skills-20260928/progress.md) |
+
+| 010 | [技能脚本执行](010-skill-scripts-20260928/README.md) | 2026-09-28 | 最新脚本、自动执行、受限输出与执行记录 | [进度与验证](010-skill-scripts-20260928/progress.md) |
+
+| 011 | [文件成果交付与验收](011-artifact-delivery-20260928/README.md) | 2026-09-28 | 文件卡片、真实内容核对、附件随版本续改与历史保留 | [进度与验证](011-artifact-delivery-20260928/progress.md) |
+
+| 012 | [会话页面精简](012-conversation-layout-20260928/README.md) | 2026-09-28 | 精简常驻信息、详情抽屉、紧凑输入框与按需查看记录 | [进度与验证](012-conversation-layout-20260928/progress.md) |
+
+| 013 | [文件附件与点名回复](013-files-mentions-20260929/README.md) | 2026-09-29 | 实际文件、消息附件、引用摘录与单人点名 | [进度与验证](013-files-mentions-20260929/progress.md) |
+
+| 014 | [上下文预算与历史回查](014-context-budget-20260929/README.md) | 2026-09-29 | Token 预算、Eino 压缩持久化、无遗漏游标与历史工具 | [进度与验证](014-context-budget-20260929/progress.md) |
 
 后续方向先作为候选事项记录，形成明确需求后再创建新的迭代目录。
 
