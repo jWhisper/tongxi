@@ -198,7 +198,7 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 			s.mu.Unlock()
 			s.chatEmit(update)
 		})
-		transcript = append(input, output...)
+		transcript = agent.WithoutImageData(append(input, output...))
 	}
 	s.mu.Lock()
 	r = cloneChat(*s.chatActive)

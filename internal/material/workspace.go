@@ -42,7 +42,7 @@ func WorkspacePath(path string) (string, error) {
 
 func supportedFile(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
-	case ".txt", ".md", ".markdown", ".pdf", ".docx", ".xlsx", ".csv":
+	case ".txt", ".md", ".markdown", ".pdf", ".docx", ".xlsx", ".csv", ".png", ".jpg", ".jpeg", ".webp":
 		return true
 	}
 	return false
@@ -146,7 +146,7 @@ func ReadWorkspace(ctx context.Context, root *os.Root, path string) ([]byte, Doc
 		return nil, Document{}, err
 	}
 	if !info.Mode().IsRegular() || !supportedFile(path) {
-		return nil, Document{}, errors.New("请选择 TXT、Markdown、PDF、DOCX、XLSX 或 CSV 普通文件")
+		return nil, Document{}, errors.New("请选择支持的文档或 PNG、JPEG、WebP 图片")
 	}
 	if info.Size() > MaxFileBytes {
 		return nil, Document{}, errors.New("文件超过20MB，请拆分")

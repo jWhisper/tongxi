@@ -272,7 +272,7 @@ func (a *App) ImportSources(conversationID string) (app.ImportResult, error) {
 		return app.ImportResult{}, err
 	}
 	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "添加会话资料", Filters: []runtime.FileFilter{{DisplayName: "文字、PDF、Word、Excel、CSV", Pattern: "*.txt;*.md;*.markdown;*.pdf;*.docx;*.xlsx;*.csv"}},
+		Title: "添加会话资料", Filters: []runtime.FileFilter{{DisplayName: "文档与图片", Pattern: "*.txt;*.md;*.markdown;*.pdf;*.docx;*.xlsx;*.csv;*.png;*.jpg;*.jpeg;*.webp"}},
 	})
 	if err != nil {
 		return app.ImportResult{}, errors.New("无法打开文件选择窗口")
@@ -422,4 +422,21 @@ func (a *App) OpenSourceFile(conversationID, id string) error {
 		return errors.New("无法打开文件，请检查系统默认应用")
 	}
 	return nil
+}
+
+func (a *App) ImportImage(conversationID, name, data string) (store.Source, error) {
+	if err := a.ready(); err != nil {
+		return store.Source{}, err
+	}
+	v, err := a.service.ImportImage(conversationID, name, data)
+	if err == nil {
+		a.workspaceChanged()
+	}
+	return v, err
+}
+func (a *App) ImagePreview(conversationID, id string, thumbnail bool) (material.ImagePreview, error) {
+	if err := a.ready(); err != nil {
+		return material.ImagePreview{}, err
+	}
+	return a.service.ImagePreview(conversationID, id, thumbnail)
 }

@@ -83,6 +83,11 @@ func (s *Store) migrate() error {
 		if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversations') WHERE name='token_budget') AND EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name='attachments') AND (NOT EXISTS(SELECT 1 FROM sqlite_master WHERE name='model_configs') OR EXISTS(SELECT 1 FROM pragma_table_info('model_configs') WHERE name='context_tokens')) AND NOT EXISTS(SELECT 1 FROM sqlite_master WHERE name='chains' AND sql LIKE '%reserved BETWEEN%')`).Scan(&current); err != nil {
 			return err
 		}
+		if current && version == len(migrations) {
+			if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='image_reads')`).Scan(&current); err != nil {
+				return err
+			}
+		}
 		if !current {
 			return fmt.Errorf("开发数据库结构已调整，请先备份数据目录，再重建数据库；工作目录中的文件无需删除")
 		}

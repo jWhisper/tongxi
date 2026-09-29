@@ -1,3 +1,4 @@
+import { ImageAttachmentInput } from "./Images";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -713,6 +714,7 @@ export default function Workspace({
                               <details className="message-reference">
                                 <summary>使用记录 · {sourceRun.tools.length}</summary>
                                 <p>{sourceRun.tools.map(toolLabel).join(" → ")}</p>
+                                {selected.imageReads.filter(read => read.runID === sourceRun.id).map(read => <p key={`${read.sourceID}-${read.hash}`}>读取图片：{read.name} · {read.width} × {read.height}</p>)}
                               </details>
                             )}
                           </div>
@@ -950,7 +952,17 @@ export default function Workspace({
                       </button>
                     </div>
                   )}
-                  <div className="compose-box">
+                  <ImageAttachmentInput key={selectedID} conversationID={selectedID} disabled={busy || importing}
+                    onBusy={loading => setPendingImports(count => count + (loading ? 1 : -1))}
+                    onChanged={files => {
+                      const id = selectedID;
+                      setDraftFiles(values => {
+                        const merged = new Map((values[id] ?? []).map(file => [file.id, file]));
+                        files.forEach(file => merged.set(file.id, file));
+                        return { ...values, [id]: [...merged.values()] };
+                      });
+                      void refresh();
+                    }}>
                     <FileAttachments files={draftFiles[selectedID] ?? []} disabled={busy}
                       onRemove={id => setDraftFiles(values => ({ ...values, [selectedID]: (values[selectedID] ?? []).filter(file => file.id !== id) }))} />
                     <MentionInput key={selectedID} value={drafts[selectedID] ?? ""}
@@ -978,7 +990,7 @@ export default function Workspace({
                         {busy ? "正在发送…" : "发送"}
                       </button>
                     </div>
-                  </div>
+                  </ImageAttachmentInput>
                 </form>
                 {detailsID === selectedID && (
                   <ConversationDetails detail={selected} agents={workspace.agents}

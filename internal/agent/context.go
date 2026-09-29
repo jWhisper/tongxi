@@ -50,7 +50,8 @@ func newContextHandlers(ctx context.Context, cm model.BaseChatModel, c *ContextC
 	reduce, err := reduction.New(ctx, &reduction.Config{
 		GenTruncOffloadFilePath: offloadPath, GenClearOffloadFilePath: offloadPath,
 		Backend: c.Backend, SkipTruncation: c.Backend == nil, ReadFileToolName: "read_tool_result",
-		TruncExcludeTools: []string{"read_tool_result", "search_chat_history", "read_chat_history"},
+		ClearExcludeTools: []string{"read_image"},
+		TruncExcludeTools: []string{"read_image", "read_tool_result", "search_chat_history", "read_chat_history"},
 		MaxLengthForTrunc: max(1000, m.inputBudget/8), MaxTokensForClear: int64(m.inputBudget * 7 / 10),
 		TokenCounter: func(_ context.Context, msgs []*schema.Message, tools []*schema.ToolInfo) (int64, error) {
 			return int64(m.count(msgs, tools)), nil
@@ -80,6 +81,14 @@ func estimateTokens(messages []*schema.Message, tools []*schema.ToolInfo) int {
 	total := 3
 	for _, m := range messages {
 		total += 8 + textTokens(m.Content) + textTokens(m.ReasoningContent) + textTokens(m.Name) + textTokens(m.ToolCallID)
+		for _, part := range m.UserInputMultiContent {
+			if part.Type == schema.ChatMessagePartTypeText {
+				total += textTokens(part.Text)
+			}
+			if part.Type == schema.ChatMessagePartTypeImageURL {
+				total += 4096
+			} // Conservative visual estimate, calibrated by provider usage.
+		}
 		for _, call := range m.ToolCalls {
 			total += 12 + textTokens(call.ID) + textTokens(call.Function.Name) + textTokens(call.Function.Arguments)
 		}
@@ -200,7 +209,7 @@ func (m *contextManager) summarize(ctx context.Context, messages []*schema.Messa
 	// Serialize historical tool calls as data, so chunk boundaries cannot create
 	// orphan provider tool messages. Even an oversized single old message is chunked.
 	var source strings.Builder
-	for _, msg := range messages {
+	for _, msg := range WithoutImageData(messages) {
 		copy := *msg
 		copy.ReasoningContent = ""
 		copy.ResponseMeta = nil
@@ -286,7 +295,7 @@ func (m *contextManager) AfterModelRewriteState(ctx context.Context, state *adk.
 
 func (m *contextManager) AfterAgent(ctx context.Context, state *adk.ChatModelAgentState) (context.Context, error) {
 	m.config.Result = nil
-	for _, msg := range state.Messages {
+	for _, msg := range WithoutImageData(state.Messages) {
 		if msg.Role != schema.System {
 			m.config.Result = append(m.config.Result, msg)
 		}

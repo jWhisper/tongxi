@@ -354,3 +354,15 @@ ScheduleRequest.attachmentIDs 在事务内校验属于本会话且为工作目�
 Token 上限统计同一 Chain 所有 Run 的 input_tokens + output_tokens，cached_tokens 是输入明细，不能再次相加。会话顶部汇总全部 Run，因而包含历次协作与后台成本；输入与输出可直接看到，点击展开缓存明细与统计口径。用户看到的累计量不是当前上下文长度，也不是货币费用。
 
 2026-09-29 通过 GitHub Releases API 与 go get @latest 核对：Eino v0.9.21、OpenAI 适配 v0.1.13、ACL v0.1.17 已是最新稳定依赖；v0.10.0-alpha.35 为预发布，未切换。项目入口说明已精简，开发操作见根目录 DEVELOPMENT.md。
+
+## 0.1.20 图片输入
+
+PNG、JPEG、WebP 沿用工作目录文件引用，不增加文件快照或模型能力开关。系统选择器、输入框粘贴和拖入都保存原件到工作目录；消息只绑定 source ID，缩略图和预览按需读取当前文件。图片上限20MB、2500万像素；内存中处理方向、等比缩小，模型输入长边最多1536像素。
+
+所有普通执行注册 `read_image(source_id | path)`；selector 仍只读公共上下文与资料目录。读图使用与文档相同的工作目录边界，禁止目录外路径、隐藏文件与符号链接。Eino Enhanced Tool 返回文字元数据和真实图片，模型封装在发往 OpenAI 兼容接口时保留完整的 tool-call/result 配对，再把图像放入紧随该组结果的 user 多模态消息，避免服务商只允许 user 消息承载图片。不同角色可以使用不同模型，无需按服务商分支；实际视觉能力和 image_url 接口支持由具体模型决定。明确拒绝图片输入时显示更换模型提示，保留原始接口错误。
+
+`image_reads` 保存执行、文件、内容指纹、原始尺寸和时间，不存像素；预览不会产生助手读取记录。每位成员需自行读取后才有图像输入。图片数据仅留在本次运行，runs transcript、持久上下文、历史摘要均移除图像字节并保留文件引用，未来需要时重读；旧图像不能通过历史记录恢复。Eino reduction 排除 read_image，避免把 base64 当长文本转存；预算每张先估4096 Tokens，再沿用服务商用量校准。服务商返回的实际图片用量随输入 Token 计数。
+
+正式文字引用校验继续以实际读过的文本片段为依据，图片不伪造片段。脚本产生的图片可以通过工作目录读图，但本期不扩展正式文件成果的快照、核对与导出流程。
+
+参考：[Eino ToolsNode 与多模态工具](https://www.cloudwego.io/docs/eino/core_modules/components/tools_node_guide/)。

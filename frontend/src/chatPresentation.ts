@@ -60,6 +60,7 @@ export function toolLabel(name: string) {
     read_workspace_file: "读取目录文件",
     list_sources: "查看资料目录",
         read_source: "读取资料",
+        read_image: "读取图片",
         search_web: "搜索网页",
         read_web: "读取网页",
       } as Record<string, string>

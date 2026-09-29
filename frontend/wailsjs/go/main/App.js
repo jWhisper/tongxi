@@ -22,6 +22,14 @@ export function ExportVersion(arg1, arg2, arg3) {
   return window['go']['main']['App']['ExportVersion'](arg1, arg2, arg3);
 }
 
+export function ImagePreview(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ImagePreview'](arg1, arg2, arg3);
+}
+
+export function ImportImage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ImportImage'](arg1, arg2, arg3);
+}
+
 export function ImportSkill() {
   return window['go']['main']['App']['ImportSkill']();
 }

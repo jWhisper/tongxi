@@ -32,10 +32,14 @@ type CountOutput struct {
 }
 
 func NewModel(ctx context.Context, baseURL, name, key string) (model.ToolCallingChatModel, error) {
-	return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+	cm, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: baseURL, Model: name, APIKey: key,
 		HTTPClient: &http.Client{Timeout: 90 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	})
+	if err != nil {
+		return nil, err
+	}
+	return &imageModel{cm}, nil
 }
 
 // Run exercises a single isolated conversation through the real Eino runner.

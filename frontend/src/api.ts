@@ -28,6 +28,8 @@ import {
   ReadWorkspaceFile,
   OpenArtifact,
   OpenSourceFile,
+  ImportImage,
+  ImagePreview,
 } from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 
@@ -63,6 +65,8 @@ export const api = {
   readWorkspaceFile: ReadWorkspaceFile,
   openArtifact: OpenArtifact,
   openSourceFile: OpenSourceFile,
+  importImage: ImportImage,
+  imagePreview: ImagePreview,
 };
 import { app } from "../wailsjs/go/models";
 import type { store, material } from "../wailsjs/go/models";
@@ -91,6 +95,7 @@ export type ConversationDetail = Pick<
   | "skillUses"
   | "scriptRuns"
   | "artifacts"
+  | "imageReads"
 >;
 export type Source = store.Source;
 export type SourcePage = store.SourcePage;

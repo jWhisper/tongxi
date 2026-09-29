@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"path/filepath"
 	"strings"
@@ -83,13 +84,24 @@ func Parse(ctx context.Context, name string, data []byte) (doc Document, err err
 		err = parseXLSX(ctx, &doc, data)
 	case "pdf":
 		err = parsePDF(ctx, &doc, data)
+	case "png", "jpg", "jpeg", "webp":
+		var c image.Config
+		var format string
+		c, format, err = imageConfig(data)
+		if doc.Format == "jpg" {
+			doc.Format = "jpeg"
+		}
+		if err == nil && format != doc.Format {
+			err = errors.New("图片扩展名与实际格式不一致，请使用正确的文件扩展名")
+		}
+		doc.Note = fmt.Sprintf("图片 · %d × %d", c.Width, c.Height)
 	default:
-		err = errors.New("支持 TXT、Markdown、PDF、DOCX、XLSX、CSV；旧 DOC/XLS 请先另存为新格式")
+		err = errors.New("支持文字、PDF、Word、Excel、CSV 及 PNG、JPEG、WebP 图片")
 	}
 	if err != nil {
 		return Document{}, err
 	}
-	if len(doc.Segments) == 0 {
+	if len(doc.Segments) == 0 && !IsImage(doc.Format) {
 		return Document{}, errors.New("未提取到文字；扫描件或图片请先转为可复制文字的文件")
 	}
 	return doc, nil

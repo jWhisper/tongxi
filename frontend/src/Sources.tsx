@@ -1,3 +1,4 @@
+import { ImagePreview, isImage } from "./Images";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "./api";
@@ -5,6 +6,7 @@ import type { Citation, Source, SourcePage, WorkspacePage } from "./api";
 import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 
 type SourcesContextValue = {
+  conversationID: string;
   sources: Source[];
   open: (id: string, segment: number, citation?: Citation) => void;
 };
@@ -77,7 +79,7 @@ export function SourceProvider({
   );
   return (
     <SourcesContext.Provider
-      value={{ sources, open: (id, segment, citation) => setTarget({ id, segment, citation }) }}
+      value={{ conversationID, sources, open: (id, segment, citation) => setTarget({ id, segment, citation }) }}
     >
       {children}
       {target && (
@@ -163,7 +165,7 @@ function SourceReader({
           <>
             <p className="source-meta">
               {page.source.format.toUpperCase()} ·{" "}
-              {page.source.characters.toLocaleString()} 字
+              {isImage(page.source.format) ? "图片" : `${page.source.characters.toLocaleString()} 字`}
             </p>
             {page.source.url && (
               <button
@@ -175,7 +177,8 @@ function SourceReader({
             )}
             {page.source.kind === "workspace" && <button className="text-button source-origin"
               onClick={() => void api.openSourceFile(conversationID, id).catch(e => setError(String(e)))}>用系统应用打开 ↗</button>}
-            <p className="source-note">{page.source.kind === "workspace" ? "读取工作目录中的最新内容。" : "保留获取时的内容。"}{page.source.note}</p>
+            {!isImage(page.source.format) && <p className="source-note">{page.source.kind === "workspace" ? "读取工作目录中的最新内容。" : "保留获取时的内容。"}{page.source.note}</p>}
+            {isImage(page.source.format) && <ImagePreview conversationID={conversationID} id={id} name={page.source.name} />}
             {page.segments.map((segment) => (
               <section key={segment.number} className="source-segment">
                 <h3>
@@ -185,7 +188,7 @@ function SourceReader({
                 <pre>{segment.content}</pre>
               </section>
             ))}
-            <nav className="source-pages" aria-label="资料分页">
+            {!isImage(page.source.format) && <nav className="source-pages" aria-label="资料分页">
               <button
                 className="text-button"
                 disabled={!history.length && position === 1}
@@ -210,7 +213,7 @@ function SourceReader({
               >
                 下一页
               </button>
-            </nav>
+            </nav>}
           </>
         )}
       </div>
@@ -342,7 +345,7 @@ export function SourcesPanel({
         </p>
       )}
       <p className="source-hint">
-        TXT / MD / PDF / DOCX / XLSX / CSV · 20MB 内 ·
+        TXT / MD / PDF / DOCX / XLSX / CSV / 图片 · 20MB 内 ·
         用到的片段会发送给会话模型
       </p>
     </div>
@@ -394,7 +397,7 @@ export function WorkDirectoryPanel({ conversationID, directory, onBind, onChange
         {page?.files.map(file => <button disabled={busy} key={file.path} onClick={() => file.directory ? void load(file.path) : void read(file.path)}>
           <span className="source-format">{file.directory ? "目录" : file.name.split(".").at(-1)?.toUpperCase()}</span><strong>{file.name}</strong><small>{file.directory ? "打开 →" : `${Math.max(1, Math.ceil(file.size / 1024))} KB`}</small>
         </button>)}
-        {page && !page.files.length && <p>没有可读文件。可放入 TXT、Markdown、PDF、DOCX、XLSX、CSV，或进入子目录查看。</p>}
+        {page && !page.files.length && <p>没有可读文件。可放入文档、表格或 PNG、JPEG、WebP 图片，也可进入子目录查看。</p>}
       </div>
       {page && (offset > 0 || page.next > 0) && <nav className="work-directory-actions" aria-label="目录分页">
         <button className="text-button" disabled={busy || !offset} onClick={() => void load(page.path, Math.max(0, offset - 100))}>上一页</button>
@@ -414,10 +417,10 @@ export function FileAttachments({ files, onRemove, disabled = false }: {
   const context = useContext(SourcesContext);
   if (!files.length) return null;
   return <div className="file-attachments" aria-label={onRemove ? "待发送附件" : "消息附件"}>
-    {files.map(file => <span className="file-chip" key={file.id}>
+    {files.map(file => <span className={`file-chip ${isImage(file.format) ? "file-chip-image" : ""}`} key={file.id}>
       <button type="button" className="file-chip-preview" title={file.name}
         onClick={() => context?.open(file.id, 1)}>
-        <span className="file-chip-format">{file.format.toUpperCase()}</span><span>{file.name.split("/").at(-1)}</span>
+        {isImage(file.format) && context ? <ImagePreview conversationID={context.conversationID} id={file.id} name={file.name} thumbnail /> : <span className="file-chip-format">{file.format.toUpperCase()}</span>}<span>{file.name.split("/").at(-1)}</span>
       </button>
       {onRemove && <button type="button" className="file-chip-remove" disabled={disabled}
         aria-label={`移除附件 ${file.name}`} onClick={() => onRemove(file.id)}>×</button>}

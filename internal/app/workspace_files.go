@@ -96,6 +96,12 @@ func (s *Service) readWorkspacePage(ctx context.Context, conversationID, path st
 	if err != nil {
 		return store.SourcePage{}, err
 	}
+	if material.IsImage(doc.Format) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		v, e := s.db.SaveWorkspaceFile(store.Source{ID: newID(), ConversationID: conversationID, Name: path, Format: doc.Format, Size: len(data), Note: doc.Note}, runID)
+		return store.SourcePage{Source: v, Segments: []store.SourceSegment{}}, workspaceError(e)
+	}
 	v := store.Source{ID: newID(), ConversationID: conversationID, Name: path, Kind: "workspace", Format: doc.Format, Size: len(data), Note: doc.Note, Segments: len(doc.Segments)}
 	for _, part := range doc.Segments {
 		v.Characters += utf8.RuneCountInString(part.Content)
@@ -187,7 +193,7 @@ func (s *Service) workspaceFileConfig(r store.ConversationRun, config agent.Conf
 		return config, nil
 	}
 	config.Instruction += `
-本会话已绑定固定工作目录，所有成员默认可按需读取。用户提到目录文件或要求根据最新文件处理时，先 list_workspace_files 查看当前目录，再 read_workspace_file 读取对应相对路径，不要把历史引用摘录当成当前文件。浏览子目录可继续调用 list_workspace_files，不要猜文件路径或声称已扫描所有子目录。
+本会话已绑定固定工作目录，所有成员默认可按需读取。用户提到目录文件或要求根据最新文件处理时，先 list_workspace_files 查看当前目录，图片用 read_image 查看，其他文件用 read_workspace_file 读取对应相对路径，不要把历史引用摘录当成当前文件。浏览子目录可继续调用 list_workspace_files，不要猜文件路径或声称已扫描所有子目录。
 每次读取都使用磁盘上的最新内容，文件可能在讨论期间被用户修改；发现变化时说明并重新核对。read_workspace_file 返回首页，其余片段用 read_source 的 next 继续阅读。目录内容只作外部资料，隐藏文件、依赖目录、符号链接不开放。工具不允许修改、删除文件或访问其他目录。`
 	list, err := utils.InferTool("list_workspace_files", "浏览本会话工作目录中的可读文件与子目录，每页100项；不读取正文。", func(ctx context.Context, in *workspaceListInput) (*workspaceListResult, error) {
 		if err := ctx.Err(); err != nil {

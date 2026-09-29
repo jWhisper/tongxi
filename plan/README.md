@@ -36,7 +36,8 @@ plan/
 ├── 013-files-mentions-20260929/       文件附件与点名回复
 ├── 014-context-budget-20260929/       Token 预算、持久摘要与历史回查
 ├── 015-collaboration-completion-20260929/ 按完成情况收尾与时间预算
-└── 016-collaboration-usage-20260929/   时间与 Token 预算、会话用量
+├── 016-collaboration-usage-20260929/   时间与 Token 预算、会话用量
+└── 017-image-input-20260929/           图片输入与按需读图
 ```
 
 ## 长期文档
@@ -74,6 +75,7 @@ plan/
 | 014 | [上下文预算与历史回查](014-context-budget-20260929/README.md) | 2026-09-29 | Token 预算、Eino 压缩持久化、无遗漏游标与历史工具 | [进度与验证](014-context-budget-20260929/progress.md) |
 | 015 | [按完成情况收尾](015-collaboration-completion-20260929/README.md) | 2026-09-29 | 取消固定发言次数、按验收/新内容收尾、持久时间预算 | [进度与验证](015-collaboration-completion-20260929/progress.md) |
 | 016 | [协作预算与用量](016-collaboration-usage-20260929/README.md) | 2026-09-29 | 可设时间/Token 上限、用量持久化与缓存明细、精简项目介绍 | [进度与验证](016-collaboration-usage-20260929/progress.md) |
+| 017 | [图片输入](017-image-input-20260929/README.md) | 2026-09-29 | 图片附件、粘贴与拖入、按需读图、多模型接口与历史处理 | [进度与验证](017-image-input-20260929/progress.md) |
 
 后续方向先作为候选事项记录，形成明确需求后再创建新的迭代目录。
 

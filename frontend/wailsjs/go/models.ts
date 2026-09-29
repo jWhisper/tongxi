@@ -39,6 +39,7 @@ export namespace app {
 	    }
 	}
 	export class ConversationDetail {
+	    imageReads: store.ImageRead[];
 	    artifacts: store.Artifact[];
 	    scriptRuns: store.ScriptRun[];
 	    skillUses: store.SkillUse[];
@@ -57,6 +58,7 @@ export namespace app {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.imageReads = this.convertValues(source["imageReads"], store.ImageRead);
 	        this.artifacts = this.convertValues(source["artifacts"], store.Artifact);
 	        this.scriptRuns = this.convertValues(source["scriptRuns"], store.ScriptRun);
 	        this.skillUses = this.convertValues(source["skillUses"], store.SkillUse);
@@ -293,6 +295,22 @@ export namespace app {
 
 export namespace material {
 
+	export class ImagePreview {
+	    dataURL: string;
+	    width: number;
+	    height: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ImagePreview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataURL = source["dataURL"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
 	export class WorkspaceFile {
 	    name: string;
 	    path: string;
@@ -863,6 +881,30 @@ export namespace store {
 		    }
 		    return a;
 		}
+	}
+	export class ImageRead {
+	    runID: string;
+	    sourceID: string;
+	    name: string;
+	    hash: string;
+	    width: number;
+	    height: number;
+	    createdAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ImageRead(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.runID = source["runID"];
+	        this.sourceID = source["sourceID"];
+	        this.name = source["name"];
+	        this.hash = source["hash"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.createdAt = source["createdAt"];
+	    }
 	}
 
 	export class Source {

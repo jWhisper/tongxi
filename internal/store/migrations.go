@@ -245,6 +245,11 @@ var migrations = []string{
  UNIQUE(script_run_id,path)
  );
  CREATE INDEX artifacts_conversation ON artifacts(conversation_id);
+ CREATE TABLE image_reads (
+  run_id TEXT NOT NULL REFERENCES runs(id), source_id TEXT NOT NULL REFERENCES sources(id),
+  hash TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY(run_id,source_id,hash)
+ );
  CREATE TABLE context_states (
   conversation_id TEXT NOT NULL REFERENCES conversations(id), agent_id TEXT NOT NULL REFERENCES agents(id),
   kind TEXT NOT NULL, through_run INTEGER NOT NULL, public_upper INTEGER NOT NULL,

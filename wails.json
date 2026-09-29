@@ -7,5 +7,5 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": { "name": "Tongxi" },
-  "info": { "productName": "Tongxi", "productVersion": "0.1.19", "comments": "同席 — 让你的 AI 伙伴一起交流、一起做事。" }
+  "info": { "productName": "Tongxi", "productVersion": "0.1.20", "comments": "同席 — 让你的 AI 伙伴一起交流、一起做事。" }
 }

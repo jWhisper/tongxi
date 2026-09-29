@@ -28,6 +28,7 @@ type Workspace struct {
 }
 
 type ConversationDetail struct {
+	ImageReads   []store.ImageRead         `json:"imageReads"`
 	Artifacts    []store.Artifact          `json:"artifacts"`
 	ScriptRuns   []store.ScriptRun         `json:"scriptRuns"`
 	SkillUses    []store.SkillUse          `json:"skillUses"`
@@ -254,6 +255,10 @@ func (s *Service) Conversation(id string) (ConversationDetail, error) {
 	if err != nil {
 		return ConversationDetail{}, workspaceError(err)
 	}
+	imageReads, err := s.db.ImageReads(id)
+	if err != nil {
+		return ConversationDetail{}, workspaceError(err)
+	}
 	if s.chatActive != nil {
 		for i := range runs {
 			if runs[i].ID == s.chatActive.ID {
@@ -261,7 +266,7 @@ func (s *Service) Conversation(id string) (ConversationDetail, error) {
 			}
 		}
 	}
-	return ConversationDetail{Conversation: c, Messages: messages, Runs: runs, Chains: chains, LeadSteps: steps, Tasks: tasks, Versions: versions, Sources: sources, SkillUses: skillUses, ScriptRuns: scriptRuns, Artifacts: artifacts}, nil
+	return ConversationDetail{ImageReads: imageReads, Conversation: c, Messages: messages, Runs: runs, Chains: chains, LeadSteps: steps, Tasks: tasks, Versions: versions, Sources: sources, SkillUses: skillUses, ScriptRuns: scriptRuns, Artifacts: artifacts}, nil
 }
 
 // The desktop can only publish as the local user; agent identity belongs to the backend.

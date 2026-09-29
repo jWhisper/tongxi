@@ -45,6 +45,10 @@ func (s *Service) captureArtifacts(ctx context.Context, r store.ConversationRun,
 			notices = append(notices, path+"：未登记成果，"+e.Error())
 			continue
 		}
+		if material.IsImage(doc.Format) {
+			notices = append(notices, path+"：图片保留在工作目录，可用 read_image 查看；暂不作为正式文件成果登记")
+			continue
+		}
 		total += len(data)
 		if total > 64*1024*1024 {
 			notices = append(notices, "本次成果文件超过64MB，其余文件仍保留在脚本目录")
