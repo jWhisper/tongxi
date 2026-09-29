@@ -22,7 +22,7 @@ func TestModelMigrationPreservesDistinctConnectionsAndSharedReferences(t *testin
  INSERT INTO agents VALUES('a','writer','','write','https://api.kimi.com/coding/v1','kimi-for-coding','shared-ref','[]',1,3,'old','old');
  INSERT INTO agents VALUES('b','reviewer','','review','https://api.kimi.com/coding/v1','kimi-for-coding','shared-ref','[]',0,2,'old','old');
  INSERT INTO agents VALUES('c','other','','other','https://api.kimi.com/coding/v1','kimi-for-coding','different-ref','[]',1,1,'old','old');
- INSERT INTO conversations VALUES('room','saved','private','lead','a','old','old',1);
+ INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at,revision) VALUES('room','saved','private','lead','a','old','old',1);
  INSERT INTO conversation_members VALUES('room','a',0);
  INSERT INTO messages(id,conversation_id,sequence,sender_type,sender_id,sender_name,content,created_at) VALUES('message','room',1,'agent','a','writer','saved reply','old');`)
 	if err != nil {

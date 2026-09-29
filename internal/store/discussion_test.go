@@ -84,10 +84,10 @@ func TestDiscussionChoicePassAndPause(t *testing.T) {
 	}
 }
 
-func TestDiscussionBudgetsAndCandidateTurnTaking(t *testing.T) {
+func TestDiscussionContinuesBeyondOldLimitsAndPausesNaturally(t *testing.T) {
 	s, c, _ := discussionFixture(t)
 	scheduleTest(t, s, "bounded", "discussion")
-	for i := 0; i < ChainLimit; i++ {
+	for i := 0; i < 15; i++ {
 		selector, err := s.QueuedRun()
 		if err != nil || selector.Kind != "selector" {
 			t.Fatal(selector, err)
@@ -107,13 +107,23 @@ func TestDiscussionBudgetsAndCandidateTurnTaking(t *testing.T) {
 		speaker, _ = claimTest(t, s, speaker)
 		finishTest(t, s, speaker, "completed", fmt.Sprint("观点-", i))
 	}
+	selector, err := s.QueuedRun()
+	if err != nil || selector.Kind != "selector" {
+		t.Fatal("discussion stopped at a count limit", selector, err)
+	}
+	selector, _ = claimTest(t, s, selector)
+	if allowed, err := s.PassDiscussion(selector.ID); err != nil || !allowed {
+		t.Fatal(allowed, err)
+	}
+	selector.Silent = true
+	finishTest(t, s, selector, "completed", "")
 	if _, err := s.QueuedRun(); err != sql.ErrNoRows {
-		t.Fatal("discussion did not reach its bound", err)
+		t.Fatal("work remained after natural pause", err)
 	}
 	chains, _ := s.Chains(c.ID)
 	runs, _ := s.ConversationRuns(c.ID)
 	messages, _ := s.Messages(c.ID)
-	if chains[0].Reserved != 6 || chains[0].Status != "completed" || len(runs) != 12 || len(messages) != 7 {
+	if chains[0].Reserved != 15 || chains[0].Status != "completed" || len(runs) != 31 || len(messages) != 16 {
 		t.Fatal(chains, len(runs), len(messages))
 	}
 }

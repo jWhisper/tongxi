@@ -51,6 +51,11 @@ export default function ConversationDetails({
               : conversation.mode === "discussion" ? "伙伴按话题自由接话；新消息会打断旧讨论。"
               : "主要助手按需邀请伙伴，检查验收要求后交付。直接补充要求即可继续修改。"}</p>
           </section>
+          {conversation.kind === "group" && <section className="conversation-budget">
+            <h3>单次协作预算</h3>
+            <p>{conversation.timeBudgetMinutes === 0 ? "时长不限" : `${conversation.timeBudgetMinutes} 分钟`} · {conversation.tokenBudget === 0 ? "Token 不限" : `${conversation.tokenBudget.toLocaleString()} Tokens（输入＋输出）`}</p>
+            <p>任一到限即暂停。可在会话设置中修改，发送新消息后生效。</p>
+          </section>}
           {task && <details className="conversation-task"><summary>当前任务</summary><p>{task.title}</p></details>}
           <SkillHistory uses={detail.skillUses} scripts={detail.scriptRuns} runs={detail.runs} />
         </div>

@@ -65,7 +65,7 @@ func TestEinoLeadReviewsRevisesAndDelivers(t *testing.T) {
 				step.NextAgentID = agents[1].ID
 				step.Task = "检查参与者能否跳过，给出具体修订意见"
 			}
-			if turn == 7 {
+			if turn == 17 {
 				step.Action, step.NextAgentID, step.Task = "complete", "", ""
 				step.Result = "完整最终方案：5分钟签到、25分钟讨论，两个环节均可选择旁听或跳过。"
 				for i := range step.Checks {
@@ -82,9 +82,9 @@ func TestEinoLeadReviewsRevisesAndDelivers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	awaitGroup(t, events, 7)
+	awaitGroup(t, events, 17)
 	detail, _ := s.Conversation(c.ID)
-	if len(detail.Runs) != 7 || detail.Chains[0].Status != "completed" || detail.Chains[0].Reserved != 7 {
+	if len(detail.Runs) != 17 || detail.Chains[0].Status != "completed" || detail.Chains[0].Reserved != 17 {
 		t.Fatal(detail.Chains, detail.Runs)
 	}
 	if !strings.Contains(detail.Messages[len(detail.Messages)-1].Content, "完整最终方案") {
@@ -93,7 +93,7 @@ func TestEinoLeadReviewsRevisesAndDelivers(t *testing.T) {
 	if detail.Chains[0].Work.Checks[1].Status != "met" {
 		t.Fatal("assessment missing")
 	}
-	if len(detail.LeadSteps) != 4 {
+	if len(detail.LeadSteps) != 9 {
 		t.Fatal("historical lead decisions missing", len(detail.LeadSteps))
 	}
 	last := detail.Messages[len(detail.Messages)-1]
@@ -102,14 +102,11 @@ func TestEinoLeadReviewsRevisesAndDelivers(t *testing.T) {
 	}
 }
 
-func TestEinoLeadBudgetAndMissingAssessment(t *testing.T) {
-	for _, mode := range []string{"budget", "missing"} {
+func TestEinoLeadNoProgressAndMissingAssessment(t *testing.T) {
+	for _, mode := range []string{"stalled", "missing"} {
 		t.Run(mode, func(t *testing.T) {
 			s, c, agents := groupService(t)
-			created := 0
 			s.newChatModel = func(_ context.Context, _ string, name string, _ string) (model.ToolCallingChatModel, error) {
-				created++
-				turn := created
 				return &collaborationModel{next: func(_ context.Context, _ []*schema.Message, _ map[string]bool) (*schema.Message, error) {
 					if mode == "missing" {
 						return schema.AssistantMessage("未经检查就说完成", nil), nil
@@ -117,7 +114,7 @@ func TestEinoLeadBudgetAndMissingAssessment(t *testing.T) {
 					if name != "writer" {
 						return schema.AssistantMessage("成员补充", nil), nil
 					}
-					return leadTool(testLeadStep(agents[1].ID, fmt.Sprintf("第%d版，仍有缺口", turn))), nil
+					return leadTool(testLeadStep(agents[1].ID, "相同成果，仍有缺口")), nil
 				}}, nil
 			}
 			events := make(chan store.ConversationRun, 1000)
@@ -129,13 +126,13 @@ func TestEinoLeadBudgetAndMissingAssessment(t *testing.T) {
 			if mode == "missing" {
 				waitRun(t, events, d.Runs[0].ID, "failed")
 			} else {
-				awaitGroup(t, events, store.LeadLimit)
+				awaitGroup(t, events, 5)
 			}
 			detail, _ := s.Conversation(c.ID)
 			if detail.Chains[0].Status == "completed" {
 				t.Fatal("unverified work accepted")
 			}
-			if mode == "budget" && (len(detail.Runs) != store.LeadLimit || detail.Chains[0].Status != "incomplete" || !strings.Contains(detail.Chains[0].Reason, "预算")) {
+			if mode == "stalled" && (len(detail.Runs) != 5 || detail.Chains[0].Status != "incomplete" || !strings.Contains(detail.Chains[0].Reason, "连续两次")) {
 				t.Fatal(detail.Chains, len(detail.Runs))
 			}
 			if mode == "missing" && len(detail.Messages) != 1 {

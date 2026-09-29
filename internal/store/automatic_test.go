@@ -120,7 +120,7 @@ func TestLegacyAutomaticConclusionStopDisableAndRetry(t *testing.T) {
 	}
 }
 
-// Old queued chains retain their pre-0.1.3 routing and six-run budget.
+// Old queued chains exercise their pre-0.1.3 routing.
 func scheduleLegacyLeadTest(t *testing.T, s *Store, key string) Delivery {
 	t.Helper()
 	d := scheduleTest(t, s, key, "lead")

@@ -90,7 +90,7 @@ export default function App() {
           ))}
         </nav>
         <footer className="sidebar-footer">
-          <span className="version">0.1.17</span>
+          <span className="version">0.1.19</span>
         </footer>
       </aside>
       <main className="main">

@@ -80,7 +80,7 @@ func (s *Store) migrate() error {
 	}
 	if version > 0 {
 		var current bool
-		if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name='attachments') AND (NOT EXISTS(SELECT 1 FROM sqlite_master WHERE name='model_configs') OR EXISTS(SELECT 1 FROM pragma_table_info('model_configs') WHERE name='context_tokens'))`).Scan(&current); err != nil {
+		if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversations') WHERE name='token_budget') AND EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name='attachments') AND (NOT EXISTS(SELECT 1 FROM sqlite_master WHERE name='model_configs') OR EXISTS(SELECT 1 FROM pragma_table_info('model_configs') WHERE name='context_tokens')) AND NOT EXISTS(SELECT 1 FROM sqlite_master WHERE name='chains' AND sql LIKE '%reserved BETWEEN%')`).Scan(&current); err != nil {
 			return err
 		}
 		if !current {

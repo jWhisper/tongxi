@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -10,31 +11,31 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const ChainLimit = 6
 const messageColumns = `id,conversation_id,sequence,sender_type,COALESCE(sender_id,''),sender_name,content,created_at,COALESCE(target_agent_id,''),COALESCE(reply_to_message_id,''),COALESCE(source_run_id,''),attachments`
-const chainColumns = `id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,status,reason,created_at,lead_policy,work,stalled,COALESCE(task_id,''),COALESCE(base_version_id,''),task_revision,basis,revision_policy`
+const chainColumns = `id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,status,reason,created_at,lead_policy,work,stalled,COALESCE(task_id,''),COALESCE(base_version_id,''),task_revision,basis,revision_policy,time_budget_minutes,token_budget`
 
 type Chain struct {
-	TaskID         string     `json:"taskID"`
-	BaseVersionID  string     `json:"baseVersionID"`
-	TaskRevision   int        `json:"taskRevision"`
-	Basis          *WorkBasis `json:"basis"`
-	RevisionPolicy int        `json:"revisionPolicy"`
-	ID             string     `json:"id"`
-	ConversationID string     `json:"conversationID"`
-	MessageID      string     `json:"messageID"`
-	Mode           string     `json:"mode"`
-	Action         string     `json:"action"`
-	LeadAgentID    string     `json:"leadAgentID"`
-	Participants   []string   `json:"participants"`
-	Reserved       int        `json:"reserved"`
-	Status         string     `json:"status"`
-	Reason         string     `json:"reason"`
-	CreatedAt      string     `json:"createdAt"`
-	LeadPolicy     int        `json:"leadPolicy"`
-	Limit          int        `json:"limit"`
-	Work           *LeadStep  `json:"work"`
-	Stalled        int        `json:"stalled"`
+	TimeBudgetMinutes int        `json:"timeBudgetMinutes"`
+	TokenBudget       int        `json:"tokenBudget"`
+	TaskID            string     `json:"taskID"`
+	BaseVersionID     string     `json:"baseVersionID"`
+	TaskRevision      int        `json:"taskRevision"`
+	Basis             *WorkBasis `json:"basis"`
+	RevisionPolicy    int        `json:"revisionPolicy"`
+	ID                string     `json:"id"`
+	ConversationID    string     `json:"conversationID"`
+	MessageID         string     `json:"messageID"`
+	Mode              string     `json:"mode"`
+	Action            string     `json:"action"`
+	LeadAgentID       string     `json:"leadAgentID"`
+	Participants      []string   `json:"participants"`
+	Reserved          int        `json:"reserved"`
+	Status            string     `json:"status"`
+	Reason            string     `json:"reason"`
+	CreatedAt         string     `json:"createdAt"`
+	LeadPolicy        int        `json:"leadPolicy"`
+	Work              *LeadStep  `json:"work"`
+	Stalled           int        `json:"stalled"`
 }
 type ScheduleRequest struct {
 	AttachmentIDs  []string `json:"attachmentIDs,omitempty"`
@@ -75,7 +76,7 @@ func scanMessage(row interface{ Scan(...any) error }) (Message, error) {
 func scanChain(row interface{ Scan(...any) error }) (Chain, error) {
 	var c Chain
 	var participants, work, basis string
-	err := row.Scan(&c.ID, &c.ConversationID, &c.MessageID, &c.Mode, &c.Action, &c.LeadAgentID, &participants, &c.Reserved, &c.Status, &c.Reason, &c.CreatedAt, &c.LeadPolicy, &work, &c.Stalled, &c.TaskID, &c.BaseVersionID, &c.TaskRevision, &basis, &c.RevisionPolicy)
+	err := row.Scan(&c.ID, &c.ConversationID, &c.MessageID, &c.Mode, &c.Action, &c.LeadAgentID, &participants, &c.Reserved, &c.Status, &c.Reason, &c.CreatedAt, &c.LeadPolicy, &work, &c.Stalled, &c.TaskID, &c.BaseVersionID, &c.TaskRevision, &basis, &c.RevisionPolicy, &c.TimeBudgetMinutes, &c.TokenBudget)
 	if err == nil {
 		err = json.Unmarshal([]byte(participants), &c.Participants)
 	}
@@ -84,10 +85,6 @@ func scanChain(row interface{ Scan(...any) error }) (Chain, error) {
 	}
 	if err == nil {
 		err = json.Unmarshal([]byte(basis), &c.Basis)
-	}
-	c.Limit = ChainLimit
-	if c.LeadPolicy == 1 {
-		c.Limit = LeadLimit
 	}
 	return c, err
 }
@@ -162,8 +159,8 @@ func (s *Store) ScheduleWithActive(in ScheduleRequest, messageID, chainID string
 		return Delivery{}, err
 	}
 	var kind, mode, lead string
-	var revision int
-	err = tx.QueryRow(`SELECT kind,mode,COALESCE(lead_agent_id,''),revision FROM conversations WHERE id=?`, in.ConversationID).Scan(&kind, &mode, &lead, &revision)
+	var revision, timeBudgetMinutes, tokenBudget int
+	err = tx.QueryRow(`SELECT kind,mode,COALESCE(lead_agent_id,''),revision,time_budget_minutes,token_budget FROM conversations WHERE id=?`, in.ConversationID).Scan(&kind, &mode, &lead, &revision, &timeBudgetMinutes, &tokenBudget)
 	if err == sql.ErrNoRows {
 		return Delivery{}, ValidationError("会话不存在")
 	}
@@ -222,9 +219,6 @@ func (s *Store) ScheduleWithActive(in ScheduleRequest, messageID, chainID string
 	default:
 		return Delivery{}, ValidationError("无效的发言安排")
 	}
-	if len(targets) > ChainLimit {
-		return Delivery{}, ValidationError("每次最多安排 6 位伙伴，请减少本轮人数")
-	}
 	names := map[string]string{}
 	for _, id := range targets {
 		if _, ok := names[id]; ok {
@@ -274,7 +268,7 @@ func (s *Store) ScheduleWithActive(in ScheduleRequest, messageID, chainID string
 		if in.Action == "lead" {
 			policy = 1
 		}
-		if _, err = tx.Exec(`INSERT INTO chains(id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,created_at,conversation_revision,lead_policy) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, chainID, in.ConversationID, m.ID, mode, in.Action, lead, string(participants), reserved, m.CreatedAt, revision, policy); err != nil {
+		if _, err = tx.Exec(`INSERT INTO chains(id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,created_at,conversation_revision,lead_policy,time_budget_minutes,token_budget) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, chainID, in.ConversationID, m.ID, mode, in.Action, lead, string(participants), reserved, m.CreatedAt, revision, policy, timeBudgetMinutes, tokenBudget); err != nil {
 			return Delivery{}, err
 		}
 		if in.Action == "lead" {
@@ -411,27 +405,11 @@ func (s *Store) Deliver(runID, callID string, in SendInput, messageID, receiverI
 			return Delivery{}, ValidationError("回复引用必须是本会话中的公开消息")
 		}
 	}
-	// Leave the last execution for the lead's automatic conclusion.
-	limit := ChainLimit - 1
-	if c.Action == "discussion" {
-		limit = ChainLimit
-	}
-	result, err := tx.Exec(`UPDATE chains SET reserved=reserved+1 WHERE id=? AND status='active' AND reserved<?`, c.ID, limit)
-	if err != nil {
+	if err := collaborationBudgetError(tx, c); err != nil {
 		return Delivery{}, err
 	}
-	n, _ := result.RowsAffected()
-	if n != 1 {
-		if c.Action == "discussion" {
-			return Delivery{}, ValidationError("本轮讨论已达上限，请结束本次发言，等待用户继续")
-		}
-		if _, err = tx.Exec(`UPDATE chains SET reason='已达讨论次数上限，最后一次留给主要助手总结' WHERE id=?`, c.ID); err != nil {
-			return Delivery{}, err
-		}
-		if err = tx.Commit(); err != nil {
-			return Delivery{}, err
-		}
-		return Delivery{}, ValidationError("已达讨论次数上限，6 次额度中的最后一次留给主要助手总结；请完成自己的回复，不要再次投递")
+	if _, err = tx.Exec(`UPDATE chains SET reserved=reserved+1 WHERE id=?`, c.ID); err != nil {
+		return Delivery{}, err
 	}
 	m := Message{ID: messageID, ConversationID: r.ConversationID, SenderType: "agent", SenderID: r.AgentID, SenderName: r.AgentName, Content: in.Content, CreatedAt: timestamp(), TargetAgentID: in.TargetAgentID, ReplyToMessageID: in.ReplyToMessageID, SourceRunID: r.ID}
 	if err = insertMessage(tx, &m); err != nil {
@@ -451,6 +429,23 @@ func finishChain(tx *sql.Tx, r ConversationRun) error {
 	if r.ChainID == "" {
 		return nil
 	}
+	c, err := scanChain(tx.QueryRow(`SELECT `+chainColumns+` FROM chains WHERE id=?`, r.ChainID))
+	if err != nil {
+		return err
+	}
+	if c.Status != "active" {
+		return nil
+	}
+	if budgetErr := collaborationBudgetError(tx, c); budgetErr != nil {
+		if !errors.Is(budgetErr, ErrCollaborationTime) && !errors.Is(budgetErr, ErrCollaborationTokens) {
+			return budgetErr
+		}
+		if _, err = stopChain(tx, c.ID, nil, budgetErr.Error()); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE chains SET status='incomplete' WHERE id=?`, c.ID)
+		return err
+	}
 	if r.Status != "completed" {
 		reason := "前序任务未完成，已取消本次协作的后续发言"
 		if r.Kind == "selector" {
@@ -460,10 +455,6 @@ func finishChain(tx *sql.Tx, r ConversationRun) error {
 			return err
 		}
 		_, err := tx.Exec(`UPDATE chains SET status='failed',reason=? WHERE id=? AND status='active'`, reason, r.ChainID)
-		return err
-	}
-	c, err := scanChain(tx.QueryRow(`SELECT `+chainColumns+` FROM chains WHERE id=?`, r.ChainID))
-	if err != nil {
 		return err
 	}
 	var pending bool
@@ -479,10 +470,6 @@ func finishChain(tx *sql.Tx, r ConversationRun) error {
 	if c.Status == "active" && c.Action == "lead" && r.AgentID != c.LeadAgentID && !pending {
 		// Commit the last member's reply and the lead's continuation together.
 		// Replaying a completion cannot enqueue a second summary.
-		if c.Reserved >= ChainLimit {
-			_, err = tx.Exec(`UPDATE chains SET status='failed',reason='执行额度已用完，未能生成主要助手总结' WHERE id=?`, c.ID)
-			return err
-		}
 		_, err = tx.Exec(`INSERT INTO runs(id,conversation_id,agent_id,message_id,status,error,created_at,agent_name,chain_id,parent_run_id,previous_run_id) SELECT ?,?,?,?,'queued','',?,name,?,?,? FROM agents WHERE id=?`, "summary_"+r.ID, r.ConversationID, c.LeadAgentID, c.MessageID, timestamp(), c.ID, r.ID, r.ID, c.LeadAgentID)
 		if err != nil {
 			return err

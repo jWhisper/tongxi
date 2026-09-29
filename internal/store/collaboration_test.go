@@ -13,7 +13,7 @@ func groupFixture(t *testing.T) (*Store, Conversation, string) {
 	s, _, dir := queueFixture(t)
 	addAgent(t, s, "b")
 	addAgent(t, s, "c")
-	c, err := s.SaveConversation(Conversation{ID: "group", Title: "group", Kind: "group", Mode: "lead", LeadAgentID: "a", MemberIDs: []string{"a", "b", "c"}}, true)
+	c, err := s.SaveConversation(Conversation{TimeBudgetMinutes: DefaultCollaborationMinutes, ID: "group", Title: "group", Kind: "group", Mode: "lead", LeadAgentID: "a", MemberIDs: []string{"a", "b", "c"}}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,17 +197,17 @@ func TestLegacyToolDeliveryBindsIdentityValidatesAndReservesConcurrently(t *test
 	for err := range results {
 		if err == nil {
 			success++
-		} else if !strings.Contains(err.Error(), "上限") {
+		} else {
 			t.Fatal(err)
 		}
 	}
-	if success != 3 {
-		t.Fatal("budget race", success)
+	if success != 12 {
+		t.Fatal("delivery race", success)
 	}
 	chains, _ := s.Chains("group")
 	runs, _ := s.ConversationRuns("group")
-	if len(runs) != 5 || chains[0].Reserved != 5 || !strings.Contains(chains[0].Reason, "上限") {
-		t.Fatal("budget exceeded", chains, len(runs))
+	if len(runs) != 14 || chains[0].Reserved != 14 {
+		t.Fatal("concurrent deliveries lost", chains, len(runs))
 	}
 	finishTest(t, s, r, "completed", "已邀请评审")
 	dup, err = s.Deliver(r.ID, "call", in, "dup-m", "dup-r")

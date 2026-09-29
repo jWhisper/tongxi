@@ -82,8 +82,15 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 		}
 		return false
 	}
-	a, err := s.db.Agent(r.AgentID)
+	err = s.db.CheckCollaborationBudget(r.ID)
 	ctx, cancel := context.WithTimeout(queueCtx, s.chatTimeout)
+	var a store.Agent
+	if err == nil {
+		err = ctx.Err()
+	}
+	if err == nil {
+		a, err = s.db.Agent(r.AgentID)
+	}
 	var cm model.ToolCallingChatModel
 	var modelConfig store.ModelConfig
 	var secret string
@@ -128,7 +135,37 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 		r.Revision++
 		input, err = s.db.ClaimConversationRun(r, a)
 	}
+	if err == nil {
+		var deadline time.Time
+		deadline, err = s.db.CollaborationDeadline(r.ID)
+		if err == nil && !deadline.IsZero() {
+			baseCancel := cancel
+			var budgetCancel context.CancelFunc
+			ctx, budgetCancel = context.WithDeadlineCause(ctx, deadline, store.ErrCollaborationTime)
+			cancel = func() { budgetCancel(); baseCancel() }
+		}
+	}
 	s.chatActive, s.chatCancel = &r, cancel
+	if err == nil {
+		cm = agent.MeterModel(cm, modelConfig.TokenRatio, func() error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return s.db.CheckCollaborationBudget(r.ID)
+		}, func(usage agent.TokenUsage) error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if err := s.db.RecordTokenUsage(r.ID, usage.Input, usage.Output, usage.Cached, usage.Estimated, s.chatActive.Revision+1); err != nil {
+				return err
+			}
+			s.chatActive.InputTokens += usage.Input
+			s.chatActive.OutputTokens += usage.Output
+			s.chatActive.CachedTokens += usage.Cached
+			s.chatActive.UsageEstimated = s.chatActive.UsageEstimated || usage.Estimated
+			s.chatActive.Revision++
+			s.chatEmit(cloneChat(*s.chatActive))
+			return s.db.CheckCollaborationBudget(r.ID)
+		})
+	}
 	s.mu.Unlock()
 	if err == nil {
 		s.chatEmit(cloneChat(r))
@@ -166,6 +203,9 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 	s.mu.Lock()
 	r = cloneChat(*s.chatActive)
 	r.ContextCompacting = false
+	if errors.Is(context.Cause(ctx), store.ErrCollaborationTime) {
+		err = store.ErrCollaborationTime
+	}
 	if err == nil && r.Status == "running" {
 		chain, chainErr := s.db.RunChain(r.ID)
 		if chainErr != nil && !errors.Is(chainErr, sql.ErrNoRows) {
@@ -193,6 +233,12 @@ func (s *Service) executeQueued(queueCtx context.Context) bool {
 			}
 			if errors.Is(ctx.Err(), context.Canceled) {
 				r.Status, r.Error = "interrupted", "执行被中断，可重新发送消息"
+			}
+			if errors.Is(err, store.ErrCollaborationTime) {
+				r.Status, r.Error = "interrupted", store.CollaborationTimeReason
+			}
+			if errors.Is(err, store.ErrCollaborationTokens) {
+				r.Status, r.Error = "interrupted", store.CollaborationTokenReason
 			}
 		}
 		r.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)

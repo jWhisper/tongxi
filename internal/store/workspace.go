@@ -30,15 +30,17 @@ type Agent struct {
 }
 
 type Conversation struct {
-	WorkDir     string   `json:"workDir"`
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Kind        string   `json:"kind"`
-	Mode        string   `json:"mode"`
-	LeadAgentID string   `json:"leadAgentID"`
-	MemberIDs   []string `json:"memberIDs"`
-	CreatedAt   string   `json:"createdAt"`
-	UpdatedAt   string   `json:"updatedAt"`
+	TimeBudgetMinutes int      `json:"timeBudgetMinutes"`
+	TokenBudget       int      `json:"tokenBudget"`
+	WorkDir           string   `json:"workDir"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	Kind              string   `json:"kind"`
+	Mode              string   `json:"mode"`
+	LeadAgentID       string   `json:"leadAgentID"`
+	MemberIDs         []string `json:"memberIDs"`
+	CreatedAt         string   `json:"createdAt"`
+	UpdatedAt         string   `json:"updatedAt"`
 }
 
 type Message struct {
@@ -57,6 +59,10 @@ type Message struct {
 }
 
 type ConversationRun struct {
+	CachedTokens      int      `json:"cachedTokens"`
+	InputTokens       int      `json:"inputTokens"`
+	OutputTokens      int      `json:"outputTokens"`
+	UsageEstimated    bool     `json:"usageEstimated"`
 	ContextCompacting bool     `json:"contextCompacting"`
 	ActiveScript      string   `json:"activeScript"`
 	Kind              string   `json:"kind"`
@@ -185,14 +191,14 @@ func (s *Store) KeyReferenced(ref string) (bool, error) {
 }
 
 func (s *Store) Conversations() ([]Conversation, error) {
-	rows, err := s.db.Query(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at,work_dir FROM conversations ORDER BY updated_at DESC,id`)
+	rows, err := s.db.Query(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at,work_dir,time_budget_minutes,token_budget FROM conversations ORDER BY updated_at DESC,id`)
 	if err != nil {
 		return nil, err
 	}
 	list := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err = rows.Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt, &c.WorkDir); err != nil {
+		if err = rows.Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt, &c.WorkDir, &c.TimeBudgetMinutes, &c.TokenBudget); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -229,7 +235,7 @@ func (s *Store) members(id string) ([]string, error) {
 }
 func (s *Store) Conversation(id string) (Conversation, error) {
 	var c Conversation
-	err := s.db.QueryRow(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at,work_dir FROM conversations WHERE id=?`, id).Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt, &c.WorkDir)
+	err := s.db.QueryRow(`SELECT id,title,kind,mode,COALESCE(lead_agent_id,''),created_at,updated_at,work_dir,time_budget_minutes,token_budget FROM conversations WHERE id=?`, id).Scan(&c.ID, &c.Title, &c.Kind, &c.Mode, &c.LeadAgentID, &c.CreatedAt, &c.UpdatedAt, &c.WorkDir, &c.TimeBudgetMinutes, &c.TokenBudget)
 	if err == sql.ErrNoRows {
 		return c, ValidationError("会话不存在")
 	}
@@ -241,6 +247,9 @@ func (s *Store) Conversation(id string) (Conversation, error) {
 }
 
 func (s *Store) SaveConversation(c Conversation, create bool) (Conversation, error) {
+	if c.TimeBudgetMinutes < 0 || c.TimeBudgetMinutes > 525600 || c.TokenBudget < 0 || c.TokenBudget > 1000000000 {
+		return c, ValidationError("时长请输入 0–525600 分钟，Token 请输入 0–1000000000；0 表示不限")
+	}
 	if (c.Kind != "private" && c.Kind != "group") || (c.Mode != "lead" && c.Mode != "discussion") {
 		return c, ValidationError("请选择有效的会话类型与协作方式")
 	}
@@ -305,9 +314,9 @@ func (s *Store) SaveConversation(c Conversation, create bool) (Conversation, err
 	}
 	now := timestamp()
 	if create {
-		_, err = tx.Exec(`INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at,work_dir) VALUES(?,?,?,?,NULLIF(?,''),?,?,?)`, c.ID, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, now, c.WorkDir)
+		_, err = tx.Exec(`INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at,work_dir,time_budget_minutes,token_budget) VALUES(?,?,?,?,NULLIF(?,''),?,?,?,?,?)`, c.ID, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, now, c.WorkDir, c.TimeBudgetMinutes, c.TokenBudget)
 	} else {
-		_, err = tx.Exec(`UPDATE conversations SET title=?,kind=?,mode=?,lead_agent_id=NULLIF(?,''),updated_at=?,work_dir=?,revision=revision+1 WHERE id=?`, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, c.WorkDir, c.ID)
+		_, err = tx.Exec(`UPDATE conversations SET title=?,kind=?,mode=?,lead_agent_id=NULLIF(?,''),updated_at=?,work_dir=?,time_budget_minutes=?,token_budget=?,revision=revision+1 WHERE id=?`, c.Title, c.Kind, c.Mode, c.LeadAgentID, now, c.WorkDir, c.TimeBudgetMinutes, c.TokenBudget, c.ID)
 	}
 	if err != nil {
 		return c, err

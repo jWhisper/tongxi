@@ -24,7 +24,7 @@ func TestSchemaSevenPreservesLegacyChainsAndForeignKeys(t *testing.T) {
 	_, err = old.Exec(`PRAGMA user_version=6;
 	INSERT INTO agents VALUES('a','lead','','instruction','https://example.test/v1','test','ref','[]',1,1,'','');
 	INSERT INTO agents VALUES('b','member','','instruction','https://example.test/v1','test','ref','[]',1,1,'','');
-	INSERT INTO conversations VALUES('group','old','group','lead','a','','',1);
+	INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at,revision) VALUES('group','old','group','lead','a','','',1);
 	INSERT INTO conversation_members VALUES('group','a',0),('group','b',1);
 	INSERT INTO messages(id,conversation_id,sequence,sender_type,sender_name,content,created_at) VALUES('root','group',1,'user','you','task','');
 	INSERT INTO chains(id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,created_at) VALUES('old-chain','group','root','lead','lead','a','["a"]',2,'');
@@ -40,7 +40,7 @@ func TestSchemaSevenPreservesLegacyChainsAndForeignKeys(t *testing.T) {
 	}
 	defer s.Close()
 	chain, err := s.RunChain("old-member")
-	if err != nil || chain.LeadPolicy != 0 || chain.Limit != 6 || chain.Work != nil || chain.Reserved != 2 {
+	if err != nil || chain.LeadPolicy != 0 || chain.Work != nil || chain.Reserved != 2 {
 		t.Fatal(chain, err)
 	}
 	r, err := s.QueuedRun()
@@ -144,7 +144,7 @@ func TestLeadRevisesOneMemberAtATimeAndKeepsCriteriaAcrossRestart(t *testing.T) 
 		t.Fatal("missing member feedback")
 	}
 	chain, _ := s.RunChain(checkRun.ID)
-	if chain.Work == nil || len(chain.Work.Checks) != 2 || chain.Limit != 13 {
+	if chain.Work == nil || len(chain.Work.Checks) != 2 {
 		t.Fatal(chain)
 	}
 	step = pendingStep("b", "初稿：5分钟签到，25分钟讨论")
@@ -197,16 +197,19 @@ func TestLeadRevisesOneMemberAtATimeAndKeepsCriteriaAcrossRestart(t *testing.T) 
 }
 
 func TestLeadBudgetsAndNoProgressNeverBecomeAccepted(t *testing.T) {
-	for _, cause := range []string{"budget", "stalled", "time"} {
+	for _, cause := range []string{"stalled", "time"} {
 		t.Run(cause, func(t *testing.T) {
 			s, _, _ := groupFixture(t)
 			d := scheduleTest(t, s, cause, "lead")
 			current := d.Runs[0]
-			if cause == "time" {
-				s.db.Exec(`UPDATE chains SET created_at=? WHERE id=?`, time.Now().Add(-LeadDuration-time.Second).UTC().Format(time.RFC3339Nano), d.ChainID)
-			}
 			for i := 0; i < 8; i++ {
 				leader, _ := claimTest(t, s, current)
+				if cause == "time" {
+					_, err := s.db.Exec(`UPDATE runs SET started_at=? WHERE id=?`, time.Now().Add(-(DefaultCollaborationMinutes*time.Minute)-time.Second).UTC().Format(time.RFC3339Nano), leader.ID)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
 				result := fmt.Sprintf("第%d版成果，仍缺少退出方式", i)
 				if cause == "stalled" {
 					result = "相同成果"
@@ -220,9 +223,6 @@ func TestLeadBudgetsAndNoProgressNeverBecomeAccepted(t *testing.T) {
 					chain, _ := s.RunChain(leader.ID)
 					if chain.Status != "incomplete" || out.Run != nil || !strings.Contains(out.Step.PublicText(), "尚未完成") {
 						t.Fatal(chain, out)
-					}
-					if cause == "budget" && chain.Reserved != LeadLimit {
-						t.Fatal("wrong execution limit", chain)
 					}
 					if cause == "stalled" && chain.Stalled != 2 {
 						t.Fatal("no-progress guard", chain)
@@ -239,7 +239,7 @@ func TestLeadBudgetsAndNoProgressNeverBecomeAccepted(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			t.Fatal("budget failed to stop")
+			t.Fatal("guard failed to stop")
 		})
 	}
 }

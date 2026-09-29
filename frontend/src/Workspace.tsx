@@ -33,6 +33,7 @@ import "./sources.css";
 import { AddFilesButton, FileAttachments, SourceProvider } from "./Sources";
 import { MessageAvatar, ReplyQuote } from "./MessageContext";
 import ConversationDetails from "./ConversationDetails";
+import TokenUsage from "./TokenUsage";
 import MentionInput from "./MentionInput";
 import { messageRoute } from "./mentions";
 import ArtifactCards from "./ArtifactCards";
@@ -241,6 +242,8 @@ export default function Workspace({
           }
         : {
             id: "",
+            timeBudgetMinutes: 20,
+            tokenBudget: 0,
             workDir: "",
             title: agent ? `与${agent.name}的私聊` : "",
             kind: agent ? "private" : "group",
@@ -395,10 +398,6 @@ export default function Workspace({
     return (
       (run.status === "failed" || run.status === "interrupted") &&
       chain?.status === "failed" &&
-      chain.reserved <
-        (chain.action === "lead" && run.agentID !== chain.leadAgentID
-          ? chain.limit - 1
-          : chain.limit) &&
       ["lead", "direct", "mention"].includes(chain.action) &&
       workspace.agents.some((a) => a.id === run.agentID && a.enabled) &&
       !selected?.runs.some((r) => r.retryOf === run.id)
@@ -622,6 +621,7 @@ export default function Workspace({
                           : "当前草稿"}
                       </button>
                     )}
+                    <TokenUsage key={selectedID} runs={selected.runs} />
                     <button type="button" className="text-button"
                       aria-haspopup="dialog" onClick={(event) => {
                         detailsTrigger.current = event.currentTarget;
@@ -739,7 +739,7 @@ export default function Workspace({
                                     : chain.status === "stopped"
                                       ? "已停止"
                                       : chain.status === "incomplete"
-                                        ? "尚未完成"
+                                        ? chain.action === "discussion" ? "已暂停" : "尚未完成"
                                         : "执行未完成"}
                               </span>
                               {chain.status === "active" && (
@@ -802,11 +802,10 @@ export default function Workspace({
                                     : "查看进展与草稿"}
                                 </button>
                               )}
-                              <details className="chain-reason">
+                              {chain.reason && <details className="chain-reason">
                                 <summary>协作记录</summary>
-                                <p>已使用 {chain.reserved}/{chain.limit} 次发言机会</p>
-                                {chain.reason && <p>{chain.reason}</p>}
-                              </details>
+                                <p>{chain.reason}</p>
+                              </details>}
                             </div>
                           ))}
                         {selected.runs
@@ -1231,6 +1230,22 @@ export default function Workspace({
                     </label>
                   )}
                 </div>
+                {conversationDraft.kind === "group" && <section className="collaboration-budget-fields">
+                  <h3>单次协作预算</h3>
+                  <div className="editor-columns">
+                    <label>时长（分钟）
+                      <input type="number" min="0" max="525600" step="1" required
+                        value={conversationDraft.timeBudgetMinutes}
+                        onChange={e => setConversationDraft({ ...conversationDraft, timeBudgetMinutes: Number(e.target.value) })} />
+                    </label>
+                    <label>Token 上限
+                      <input type="number" min="0" max="1000000000" step="1" required
+                        value={conversationDraft.tokenBudget}
+                        onChange={e => setConversationDraft({ ...conversationDraft, tokenBudget: Number(e.target.value) })} />
+                    </label>
+                  </div>
+                  <p className="field-help">任一到限即暂停；0 表示不限。Token 为本次协作所有模型调用的输入与输出之和，缓存不重复相加。重试沿用原预算，发送新消息开始新预算。</p>
+                </section>}
                 <div className="directory-choice">
                   <strong>工作目录</strong>
                   <p>{conversationDraft.workDir || (conversationDraft.id ? "尚未绑定，可选择一次。" : "保存时自动创建独立目录，也可以选择已有文件夹。")}</p>

@@ -672,3 +672,24 @@
   .conversation-actions { gap: 10px; }
   .conversation-actions button { font-size: 11px; }
 }
+
+.token-usage { position: relative; flex-shrink: 0; font-size: 11px; }
+.token-usage > summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 3px; padding: 4px 6px; border-radius: 6px; color: var(--muted); }
+.token-usage > summary::-webkit-details-marker { display: none; }
+.token-usage > summary:hover, .token-usage[open] > summary { background: var(--sidebar); }
+.token-usage > summary strong { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; margin-left: 4px; }
+.token-usage > summary small { font-size: 10px; white-space: nowrap; }
+.token-usage-detail { position: absolute; z-index: 5; top: calc(100% + 10px); right: 0; width: min(290px, calc(100vw - 48px)); padding: 18px; background: white; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 30px #19314918; }
+.token-usage-detail dl { margin: 12px 0; }
+.token-usage-detail dl > div { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; }
+.token-usage-detail dt { color: var(--muted); }
+.token-usage-detail dd { margin: 0; font-variant-numeric: tabular-nums; }
+.token-usage-detail p, .conversation-budget p { font-size: 11px; line-height: 1.7; color: var(--muted); white-space: normal; }
+.collaboration-budget-fields h3 { font-size: 13px; margin: 4px 0 12px; }
+@media (max-width: 1100px) {
+  .conversation-heading { flex-wrap: wrap; }
+  .conversation-heading > div:first-child { flex: 1 0 100%; }
+  .conversation-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+}
+
+.token-usage > summary:focus-visible { outline: 3px solid #70b6ac; outline-offset: 3px; }

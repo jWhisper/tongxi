@@ -98,7 +98,7 @@ func TestPausedWorkResumesAfterRestartWithoutSpendingOldBudget(t *testing.T) {
 	step.Questions = []string{"实际报名人数是多少？"}
 	step.Brief = "时长30分钟，允许不发言；缺实际报名人数"
 	d1, _ := reviseTest(t, s, "paused", "请做读书会方案，缺人数时先等我补充", "", step)
-	if _, err := s.db.Exec(`UPDATE chains SET reserved=13,created_at='2000-01-01T00:00:00Z' WHERE id=?`, d1.ChainID); err != nil {
+	if _, err := s.db.Exec(`UPDATE runs SET started_at='2000-01-01T00:00:00Z' WHERE chain_id=?`, d1.ChainID); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -244,7 +244,7 @@ func TestSchemaNineBackfillsDeliveredAndPausedWork(t *testing.T) {
 	_, err = db.Exec(`PRAGMA user_version=8;
 	INSERT INTO model_configs(id,name,provider,base_url,model,key_ref,version,created_at,updated_at) VALUES('model','model','compatible','https://example.test','m','ref',1,'','');
 	INSERT INTO agents VALUES('a','a','','instruction','model','[]',1,1,'','');
-	INSERT INTO conversations VALUES('group','group','group','lead','a','','',1);
+	INSERT INTO conversations(id,title,kind,mode,lead_agent_id,created_at,updated_at,revision) VALUES('group','group','group','lead','a','','',1);
 	INSERT INTO conversation_members VALUES('group','a',0);
 	INSERT INTO messages(id,conversation_id,sequence,sender_type,sender_name,content,created_at) VALUES('m','group',1,'user','you','old goal','');`)
 	if err != nil {

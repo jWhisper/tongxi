@@ -45,6 +45,9 @@ func workspaceError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, store.ErrCollaborationTime) || errors.Is(err, store.ErrCollaborationTokens) {
+		return err
+	}
 	var validation store.ValidationError
 	if errors.As(err, &validation) {
 		return err

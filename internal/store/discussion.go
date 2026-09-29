@@ -2,8 +2,6 @@ package store
 
 import "database/sql"
 
-const DiscussionSelectionLimit = 6
-
 // A user interruption and the replacement request commit in one transaction.
 func supersedeDiscussion(tx *sql.Tx, conversationID string, active *ConversationRun) ([]ConversationRun, error) {
 	rows, err := tx.Query(`SELECT id FROM chains WHERE conversation_id=? AND action='discussion' AND status='active'`, conversationID)
@@ -86,12 +84,15 @@ func (s *Store) SelectDiscussionSpeaker(runID, agentID, newID string) (Conversat
 	if err != nil {
 		return child, err
 	}
-	result, err := tx.Exec(`UPDATE chains SET reserved=reserved+1 WHERE id=? AND status='active' AND reserved<?`, r.ChainID, ChainLimit)
+	c, err := scanChain(tx.QueryRow(`SELECT `+chainColumns+` FROM chains WHERE id=?`, r.ChainID))
 	if err != nil {
 		return child, err
 	}
-	if n, _ := result.RowsAffected(); n != 1 {
-		return child, ValidationError("本轮讨论已达上限")
+	if err := collaborationBudgetError(tx, c); err != nil {
+		return child, err
+	}
+	if _, err = tx.Exec(`UPDATE chains SET reserved=reserved+1 WHERE id=?`, r.ChainID); err != nil {
+		return child, err
 	}
 	_, err = tx.Exec(`INSERT INTO runs(id,conversation_id,agent_id,message_id,status,error,created_at,agent_name,chain_id,parent_run_id,previous_run_id) VALUES(?,?,?,?,'queued','',?,?,?,?,?)`, newID, r.ConversationID, agentID, r.MessageID, timestamp(), name, r.ChainID, r.ID, r.ID)
 	if err != nil {
@@ -114,20 +115,8 @@ func (s *Store) PassDiscussion(runID string) (bool, error) {
 }
 
 func continueDiscussion(tx *sql.Tx, c Chain, r ConversationRun) error {
-	reason := ""
-	var selections int
-	if err := tx.QueryRow(`SELECT count(*) FROM runs WHERE chain_id=? AND kind='selector'`, c.ID).Scan(&selections); err != nil {
-		return err
-	}
 	if r.Kind == "selector" {
-		reason = "暂时没有新的补充，等你继续"
-	} else if c.Reserved >= ChainLimit {
-		reason = "本轮发言已达上限，等你继续"
-	} else if selections >= DiscussionSelectionLimit {
-		reason = "本轮讨论暂歇，等你继续"
-	}
-	if reason != "" {
-		_, err := tx.Exec(`UPDATE chains SET status='completed',reason=? WHERE id=? AND status='active'`, reason, c.ID)
+		_, err := tx.Exec(`UPDATE chains SET status='completed',reason='暂时没有新的补充，等你继续' WHERE id=? AND status='active'`, c.ID)
 		return err
 	}
 	var connectionID, name, triggerID string

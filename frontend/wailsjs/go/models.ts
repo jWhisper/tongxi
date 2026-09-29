@@ -668,6 +668,8 @@ export namespace store {
 		}
 	}
 	export class Chain {
+	    timeBudgetMinutes: number;
+	    tokenBudget: number;
 	    taskID: string;
 	    baseVersionID: string;
 	    taskRevision: number;
@@ -685,7 +687,6 @@ export namespace store {
 	    reason: string;
 	    createdAt: string;
 	    leadPolicy: number;
-	    limit: number;
 	    work?: LeadStep;
 	    stalled: number;
 
@@ -695,6 +696,8 @@ export namespace store {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timeBudgetMinutes = source["timeBudgetMinutes"];
+	        this.tokenBudget = source["tokenBudget"];
 	        this.taskID = source["taskID"];
 	        this.baseVersionID = source["baseVersionID"];
 	        this.taskRevision = source["taskRevision"];
@@ -712,7 +715,6 @@ export namespace store {
 	        this.reason = source["reason"];
 	        this.createdAt = source["createdAt"];
 	        this.leadPolicy = source["leadPolicy"];
-	        this.limit = source["limit"];
 	        this.work = this.convertValues(source["work"], LeadStep);
 	        this.stalled = source["stalled"];
 	    }
@@ -737,6 +739,8 @@ export namespace store {
 	}
 
 	export class Conversation {
+	    timeBudgetMinutes: number;
+	    tokenBudget: number;
 	    workDir: string;
 	    id: string;
 	    title: string;
@@ -753,6 +757,8 @@ export namespace store {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timeBudgetMinutes = source["timeBudgetMinutes"];
+	        this.tokenBudget = source["tokenBudget"];
 	        this.workDir = source["workDir"];
 	        this.id = source["id"];
 	        this.title = source["title"];
@@ -765,6 +771,10 @@ export namespace store {
 	    }
 	}
 	export class ConversationRun {
+	    cachedTokens: number;
+	    inputTokens: number;
+	    outputTokens: number;
+	    usageEstimated: boolean;
 	    contextCompacting: boolean;
 	    activeScript: string;
 	    kind: string;
@@ -793,6 +803,10 @@ export namespace store {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cachedTokens = source["cachedTokens"];
+	        this.inputTokens = source["inputTokens"];
+	        this.outputTokens = source["outputTokens"];
+	        this.usageEstimated = source["usageEstimated"];
 	        this.contextCompacting = source["contextCompacting"];
 	        this.activeScript = source["activeScript"];
 	        this.kind = source["kind"];

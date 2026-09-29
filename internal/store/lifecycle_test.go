@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 )
@@ -117,24 +116,18 @@ func TestRetryPreservesTriggerBudgetAndSurvivesRestart(t *testing.T) {
 		t.Fatal("retry rewrote old records", old, child)
 	}
 	current := retry
-	for reserved := 3; reserved <= 6; reserved++ {
+	for reserved := 3; reserved <= 16; reserved++ {
 		active, _ := claimTest(t, s, current)
 		finishTest(t, s, active, "failed", "another failure")
 		newer, err := s.RetryRun(current.ID, fmt.Sprintf("request-%d", reserved), fmt.Sprintf("run-%d", reserved))
-		if reserved == 6 {
-			if err == nil || !strings.Contains(err.Error(), "6 次") {
-				t.Fatal("retry exceeded budget", err)
-			}
-		} else {
-			if err != nil {
-				t.Fatal(err)
-			}
-			current = newer
+		if err != nil {
+			t.Fatal(err)
 		}
+		current = newer
 	}
 	chains, _ := s.Chains("group")
 	runs, _ := s.ConversationRuns("group")
-	if chains[0].Reserved != 6 || len(runs) != 6 {
+	if chains[0].Reserved != 17 || len(runs) != 17 {
 		t.Fatal(chains, len(runs))
 	}
 }

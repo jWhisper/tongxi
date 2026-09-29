@@ -7,12 +7,12 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const runColumns = `id,conversation_id,agent_id,message_id,status,error,created_at,text,tools,started_at,finished_at,revision,agent_name,COALESCE(chain_id,''),COALESCE(parent_run_id,''),COALESCE(previous_run_id,''),COALESCE(retry_of,''),kind,silent`
+const runColumns = `id,conversation_id,agent_id,message_id,status,error,created_at,text,tools,started_at,finished_at,revision,agent_name,COALESCE(chain_id,''),COALESCE(parent_run_id,''),COALESCE(previous_run_id,''),COALESCE(retry_of,''),kind,silent,input_tokens,output_tokens,usage_estimated,cached_tokens`
 
 func scanConversationRun(row interface{ Scan(...any) error }) (ConversationRun, error) {
 	var r ConversationRun
 	var tools string
-	err := row.Scan(&r.ID, &r.ConversationID, &r.AgentID, &r.MessageID, &r.Status, &r.Error, &r.CreatedAt, &r.Text, &tools, &r.StartedAt, &r.FinishedAt, &r.Revision, &r.AgentName, &r.ChainID, &r.ParentRunID, &r.PreviousRunID, &r.RetryOf, &r.Kind, &r.Silent)
+	err := row.Scan(&r.ID, &r.ConversationID, &r.AgentID, &r.MessageID, &r.Status, &r.Error, &r.CreatedAt, &r.Text, &tools, &r.StartedAt, &r.FinishedAt, &r.Revision, &r.AgentName, &r.ChainID, &r.ParentRunID, &r.PreviousRunID, &r.RetryOf, &r.Kind, &r.Silent, &r.InputTokens, &r.OutputTokens, &r.UsageEstimated, &r.CachedTokens)
 	if err == nil {
 		err = json.Unmarshal([]byte(tools), &r.Tools)
 	}

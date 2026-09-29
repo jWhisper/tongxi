@@ -63,7 +63,7 @@ func groupService(t *testing.T) (*Service, store.Conversation, []store.Agent) {
 		members = append(members, a)
 		ids = append(ids, a.ID)
 	}
-	c, err := s.SaveConversation(store.Conversation{Title: "group", Kind: "group", Mode: "lead", LeadAgentID: ids[0], MemberIDs: ids})
+	c, err := s.SaveConversation(store.Conversation{TimeBudgetMinutes: store.DefaultCollaborationMinutes, Title: "group", Kind: "group", Mode: "lead", LeadAgentID: ids[0], MemberIDs: ids})
 	if err != nil {
 		t.Fatal(err)
 	}

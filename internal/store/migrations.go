@@ -12,7 +12,9 @@ var migrations = []string{
 	CREATE TABLE conversations (
 		id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('private','group')),
 		mode TEXT NOT NULL CHECK(mode IN ('lead','discussion')), lead_agent_id TEXT REFERENCES agents(id),
-		created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+		time_budget_minutes INTEGER NOT NULL DEFAULT 20 CHECK(time_budget_minutes>=0),
+		token_budget INTEGER NOT NULL DEFAULT 0 CHECK(token_budget>=0)
 	);
 	CREATE TABLE conversation_members (
 		conversation_id TEXT NOT NULL REFERENCES conversations(id), agent_id TEXT NOT NULL REFERENCES agents(id),
@@ -28,7 +30,10 @@ var migrations = []string{
 	CREATE TABLE runs (
 		id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), agent_id TEXT NOT NULL REFERENCES agents(id),
 		message_id TEXT NOT NULL REFERENCES messages(id), status TEXT NOT NULL CHECK(status IN ('queued','running','completed','failed','cancelled','interrupted')),
-		error TEXT NOT NULL, created_at TEXT NOT NULL
+		error TEXT NOT NULL, created_at TEXT NOT NULL,
+		input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
+		cached_tokens INTEGER NOT NULL DEFAULT 0,
+		usage_estimated INTEGER NOT NULL DEFAULT 0 CHECK(usage_estimated IN (0,1))
 	);
 	CREATE INDEX runs_conversation ON runs(conversation_id,created_at);`,
 	`ALTER TABLE runs ADD COLUMN text TEXT NOT NULL DEFAULT '';
@@ -48,7 +53,7 @@ var migrations = []string{
 	`CREATE TABLE chains (
 		id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
 		message_id TEXT NOT NULL REFERENCES messages(id), mode TEXT NOT NULL, action TEXT NOT NULL,
-		lead_agent_id TEXT NOT NULL, participants TEXT NOT NULL, reserved INTEGER NOT NULL CHECK(reserved BETWEEN 0 AND 6),
+		lead_agent_id TEXT NOT NULL, participants TEXT NOT NULL, reserved INTEGER NOT NULL CHECK(reserved>=0),
 		status TEXT NOT NULL DEFAULT 'active', reason TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
 	);
 	ALTER TABLE runs ADD COLUMN chain_id TEXT REFERENCES chains(id);
@@ -88,11 +93,13 @@ var migrations = []string{
 	`CREATE TABLE chains_v7 (
 		id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
 		message_id TEXT NOT NULL REFERENCES messages(id), mode TEXT NOT NULL, action TEXT NOT NULL,
-		lead_agent_id TEXT NOT NULL, participants TEXT NOT NULL, reserved INTEGER NOT NULL CHECK(reserved BETWEEN 0 AND 13),
+		lead_agent_id TEXT NOT NULL, participants TEXT NOT NULL, reserved INTEGER NOT NULL CHECK(reserved>=0),
 		status TEXT NOT NULL DEFAULT 'active', reason TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
 		conversation_revision INTEGER NOT NULL DEFAULT 1,
 		lead_policy INTEGER NOT NULL DEFAULT 0 CHECK(lead_policy IN (0,1)),
-		work TEXT NOT NULL DEFAULT 'null', stalled INTEGER NOT NULL DEFAULT 0
+		work TEXT NOT NULL DEFAULT 'null', stalled INTEGER NOT NULL DEFAULT 0,
+		time_budget_minutes INTEGER NOT NULL DEFAULT 20 CHECK(time_budget_minutes>=0),
+		token_budget INTEGER NOT NULL DEFAULT 0 CHECK(token_budget>=0)
 	);
 	INSERT INTO chains_v7(id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,status,reason,created_at,conversation_revision)
 		SELECT id,conversation_id,message_id,mode,action,lead_agent_id,participants,reserved,status,reason,created_at,conversation_revision FROM chains;

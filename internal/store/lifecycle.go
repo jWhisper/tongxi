@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 )
 
 func readRuns(tx *sql.Tx, query string, args ...any) ([]ConversationRun, error) {
@@ -202,17 +201,15 @@ func (s *Store) RetryRun(id, requestID, newID string) (ConversationRun, error) {
 	if err != nil {
 		return r, err
 	}
-	limit := c.Limit
-	if c.Action == "lead" && original.AgentID != c.LeadAgentID {
-		limit-- // A successful member retry still needs a lead conclusion.
+	if err := collaborationBudgetError(tx, c); err != nil {
+		return r, err
 	}
-	result, err := tx.Exec(`UPDATE chains SET reserved=reserved+1,status='active',reason='' WHERE id=? AND status='failed' AND reserved<?`, c.ID, limit)
+	result, err := tx.Exec(`UPDATE chains SET reserved=reserved+1,status='active',reason='' WHERE id=? AND status='failed'`, c.ID)
 	if err != nil {
 		return r, err
 	}
-	n, _ := result.RowsAffected()
-	if n != 1 {
-		return r, ValidationError(fmt.Sprintf("本次协作已结束或已用完 %d 次额度，请重新发起", c.Limit))
+	if n, _ := result.RowsAffected(); n != 1 {
+		return r, ValidationError("本次协作已结束，请重新发送消息继续")
 	}
 	r = ConversationRun{ID: newID, ConversationID: original.ConversationID, AgentID: original.AgentID, MessageID: original.MessageID, ChainID: c.ID, ParentRunID: original.ParentRunID, RetryOf: original.ID, AgentName: name, Status: "queued", CreatedAt: timestamp(), Revision: 1, Tools: []string{}}
 	if _, err = tx.Exec(`INSERT INTO runs(id,conversation_id,agent_id,message_id,status,error,created_at,agent_name,chain_id,parent_run_id,retry_of) VALUES(?,?,?,?,'queued','',?,?,?,NULLIF(?,''),?)`, r.ID, r.ConversationID, r.AgentID, r.MessageID, r.CreatedAt, r.AgentName, r.ChainID, r.ParentRunID, r.RetryOf); err != nil {

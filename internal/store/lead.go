@@ -3,15 +3,12 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
-
-const LeadLimit = 13
-const LeadDuration = 10 * time.Minute
 
 type AcceptanceCheck struct {
 	Criterion string `json:"criterion" jsonschema:"description=具体且可检查的验收条件，首次确定后保持原文和顺序"`
@@ -133,24 +130,19 @@ func (s *Store) AdvanceLead(runID string, step LeadStep, messageID, nextID strin
 			stalled = c.Stalled + 1
 		}
 	}
-	if step.Action == "delegate" {
-		reason := ""
-		started, err := time.Parse(time.RFC3339Nano, c.CreatedAt)
-		if err != nil {
-			return out, err
-		}
-		switch {
-		case c.Reserved+2 > LeadLimit:
-			reason = "已达本次执行预算，尚未完成验收"
-		case time.Since(started) >= LeadDuration:
-			reason = "已达本次协作时间预算，尚未完成验收"
-		case stalled >= 2:
-			reason = "连续两次检查未更新成果或验收状态，暂停等待补充"
-		}
-		if reason != "" {
-			step.Action, step.NextAgentID, step.Task = "pause", "", ""
-			step.Reason = reason + "。" + step.Reason
-		}
+	budgetErr := collaborationBudgetError(tx, c)
+	if budgetErr != nil && !errors.Is(budgetErr, ErrCollaborationTime) && !errors.Is(budgetErr, ErrCollaborationTokens) {
+		return out, budgetErr
+	}
+	reason := ""
+	if budgetErr != nil {
+		reason = budgetErr.Error()
+	} else if step.Action == "delegate" && stalled >= 2 {
+		reason = "连续两次检查未更新成果或验收状态，暂停等待补充"
+	}
+	if reason != "" {
+		step.Action, step.NextAgentID, step.Task = "pause", "", ""
+		step.Reason = reason + "。" + step.Reason
 	}
 	if step.Action == "delegate" {
 		if step.NextAgentID == r.AgentID {
@@ -306,10 +298,6 @@ func continueLead(tx *sql.Tx, c Chain, r ConversationRun, pending bool) error {
 			status = "completed"
 		}
 		_, err = tx.Exec(`UPDATE chains SET status=?,reason=? WHERE id=?`, status, step.Reason, c.ID)
-		return err
-	}
-	if c.Reserved >= LeadLimit {
-		_, err := tx.Exec(`UPDATE chains SET status='incomplete',reason='执行额度已用完，尚未完成验收' WHERE id=?`, c.ID)
 		return err
 	}
 	_, err := tx.Exec(`INSERT INTO runs(id,conversation_id,agent_id,message_id,status,error,created_at,agent_name,chain_id,parent_run_id,previous_run_id) SELECT ?,?,?,?,'queued','',?,name,?,?,? FROM agents WHERE id=?`, "review_"+r.ID, r.ConversationID, c.LeadAgentID, c.MessageID, timestamp(), c.ID, r.ID, r.ID, c.LeadAgentID)

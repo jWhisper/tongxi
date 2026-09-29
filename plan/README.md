@@ -34,7 +34,9 @@ plan/
 ├── 011-artifact-delivery-20260928/    文件成果交付与验收
 ├── 012-conversation-layout-20260928/  会话页面精简
 ├── 013-files-mentions-20260929/       文件附件与点名回复
-└── 014-context-budget-20260929/       Token 预算、持久摘要与历史回查
+├── 014-context-budget-20260929/       Token 预算、持久摘要与历史回查
+├── 015-collaboration-completion-20260929/ 按完成情况收尾与时间预算
+└── 016-collaboration-usage-20260929/   时间与 Token 预算、会话用量
 ```
 
 ## 长期文档
@@ -69,8 +71,9 @@ plan/
 | 012 | [会话页面精简](012-conversation-layout-20260928/README.md) | 2026-09-28 | 精简常驻信息、详情抽屉、紧凑输入框与按需查看记录 | [进度与验证](012-conversation-layout-20260928/progress.md) |
 
 | 013 | [文件附件与点名回复](013-files-mentions-20260929/README.md) | 2026-09-29 | 实际文件、消息附件、引用摘录与单人点名 | [进度与验证](013-files-mentions-20260929/progress.md) |
-
 | 014 | [上下文预算与历史回查](014-context-budget-20260929/README.md) | 2026-09-29 | Token 预算、Eino 压缩持久化、无遗漏游标与历史工具 | [进度与验证](014-context-budget-20260929/progress.md) |
+| 015 | [按完成情况收尾](015-collaboration-completion-20260929/README.md) | 2026-09-29 | 取消固定发言次数、按验收/新内容收尾、持久时间预算 | [进度与验证](015-collaboration-completion-20260929/progress.md) |
+| 016 | [协作预算与用量](016-collaboration-usage-20260929/README.md) | 2026-09-29 | 可设时间/Token 上限、用量持久化与缓存明细、精简项目介绍 | [进度与验证](016-collaboration-usage-20260929/progress.md) |
 
 后续方向先作为候选事项记录，形成明确需求后再创建新的迭代目录。
 
